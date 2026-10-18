@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Marketplace automotriz inspirado en la experiencia pública de 1001Carros.com" />
+    <meta name="theme-color" content="#0a3b91" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a3b91'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='31' font-family='Arial' font-weight='700' fill='%23ffd400'%3E1K%3C/text%3E%3C/svg%3E" />
+    <title>1001Carros.com — Encuentra tu próximo carro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="navbar-brand" href="/" data-route aria-label="1001Carros.com, inicio">
+        <img src="https://admin.changanecuador.com/uploads/1001carros_logo_df05660ab3.svg" alt="1001Carros.com" width="174" height="24" />
+      </a>
+      <button class="menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span></span><span></span><span></span></button>
+      <nav class="main-nav" aria-label="Navegación principal">
+        <a href="/" data-route data-nav-section="inicio">Inicio</a><a href="/seminuevos" data-route data-nav-section="comprar">Comprar</a><a href="/vender" data-route data-nav-section="vender">Vender</a>
+      </nav>
+      <div class="header-actions">
+        <span class="country-link" aria-label="Ecuador" title="Ecuador"><img class="ecuador-flag" src="https://flagcdn.com/ec.svg" alt="" width="20" height="20" /></span>
+        <a class="account-link" href="/login" data-route id="account-link">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="9" r="3"/><path d="M6.8 18c1.2-2.4 3-3.6 5.2-3.6s4 1.2 5.2 3.6"/></svg>
+          <span class="account-name">Iniciar sesión</span>
+          <svg class="account-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+        </a>
+      </div>
+    </header>
+    <main id="app" tabindex="-1"><div class="page-loader"><span></span><p>Cargando catálogo…</p></div></main>
+    <footer>
+      <div class="footer-brand"><a class="brand brand-light" href="/" data-route><span class="brand-mark">1001</span><span>Carros.com</span></a><p>Tu próximo carro empieza con una buena decisión.</p></div>
+      <div><strong>Comprar</strong><a href="/nuevos" data-route>Nuevos</a><a href="/seminuevos" data-route>Seminuevos</a><a href="/usados" data-route>Usados</a></div>
+      <div><strong>Servicios</strong><a href="/vender" data-route>Vender mi carro</a><a href="/financiamiento" data-route>Financiamiento</a><a href="/agencias" data-route>Agencias</a></div>
+      <div><strong>Mi cuenta</strong><a href="/login" data-route>Iniciar sesión</a><a href="/favoritos" data-route>Favoritos</a><a href="/contacto" data-route>Contáctanos</a></div>
+      <p class="footer-bottom">© 2026 Prototipo educativo inspirado en 1001Carros.com. No es el sitio oficial.</p>
+    </footer>
+    <div class="compare-bar" id="compare-bar" hidden><div><strong>Comparar vehículos</strong><span id="compare-count">0 de 3 seleccionados</span></div><div id="compare-thumbs"></div><button type="button" id="compare-action">Comparar ahora</button><button class="compare-close" id="compare-close" type="button" aria-label="Vaciar comparación">×</button></div>
+    <div class="modal-backdrop" id="modal" hidden></div><div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
