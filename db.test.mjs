@@ -1,9 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { newDb } from "pg-mem";
-import { createStore, hashPassword, verifyPassword } from "./db.mjs";
+import { createStore, databaseUrl, hashPassword, verifyPassword } from "./db.mjs";
 
 function memoryStore(){const database=newDb();const adapter=database.adapters.createPg(),pool=new adapter.Pool();return createStore(pool);}
+
+test("acepta la variable POSTGRES_URL que provee la integración de Neon en Vercel",()=>{
+  const originalDatabaseUrl=process.env.DATABASE_URL,originalPostgresUrl=process.env.POSTGRES_URL;
+  delete process.env.DATABASE_URL;
+  process.env.POSTGRES_URL="postgresql://<REDACTED>@neon.example/neondb?sslmode=require";
+  assert.equal(databaseUrl(),process.env.POSTGRES_URL);
+  if(originalDatabaseUrl===undefined)delete process.env.DATABASE_URL;else process.env.DATABASE_URL=originalDatabaseUrl;
+  if(originalPostgresUrl===undefined)delete process.env.POSTGRES_URL;else process.env.POSTGRES_URL=originalPostgresUrl;
+});
 
 test("crea y siembra el catálogo PostgreSQL",async()=>{
   const store=memoryStore();

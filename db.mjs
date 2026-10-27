@@ -86,6 +86,7 @@ export function createStore(pool){
 }
 
 let defaultStore;
-export function getStore(){if(defaultStore)return defaultStore;const connectionString=process.env.DATABASE_URL;if(!connectionString)throw new Error("Falta DATABASE_URL. Configura una conexión PostgreSQL antes de iniciar la aplicación.");const pool=new Pool({connectionString,max:Number(process.env.PG_POOL_MAX||5),idleTimeoutMillis:30000,connectionTimeoutMillis:10000});defaultStore=createStore(pool);return defaultStore;}
+export const databaseUrl=()=>process.env.DATABASE_URL||process.env.POSTGRES_URL||"";
+export function getStore(){if(defaultStore)return defaultStore;const connectionString=databaseUrl();if(!connectionString)throw new Error("Falta DATABASE_URL o POSTGRES_URL. Configura una conexión PostgreSQL antes de iniciar la aplicación.");const pool=new Pool({connectionString,max:Number(process.env.PG_POOL_MAX||5),idleTimeoutMillis:30000,connectionTimeoutMillis:10000});defaultStore=createStore(pool);return defaultStore;}
 export function hashPassword(password){const salt=randomBytes(16).toString("hex");return `${salt}:${scryptSync(password,salt,64).toString("hex")}`;}
 export function verifyPassword(password,stored){try{const [salt,key]=String(stored||"").split(":");const storedKey=Buffer.from(key,"hex"),candidate=scryptSync(password,salt,64);return storedKey.length===candidate.length&&timingSafeEqual(storedKey,candidate);}catch{return false;}}
