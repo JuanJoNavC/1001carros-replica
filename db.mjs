@@ -1,21 +1,21 @@
-import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import pg from "pg";
+
+const { Pool } = pg;
 
 const vehicleSeed = [
-  ["U-31001","seminuevos","suv","Quito","Toyota","Corolla Cross Mid Hybrid",2023,12900,"4x2","Automática","Híbrido","1.8","Blanco","Tela","Japón",32500,712,"Garantizado","https://images.unsplash.com/photo-1626072557464-90403d788e8d?auto=format&fit=crop&w=1200&q=84",1],
-  ["U-31002","seminuevos","camioneta","Guayaquil","Toyota","Hilux 2.8 CD 4x4",2022,41800,"4x4","Automática","Diesel","2.8","Plateado","Cuero","Argentina",46900,938,"Vista 360°","https://images.unsplash.com/photo-1559416523-140ddc3d238c?auto=format&fit=crop&w=1200&q=84",1],
-  ["N-11003","nuevos","suv","Quito","Changan","CS55 Plus Luxury",2026,0,"4x2","Automática","Gasolina","1.5 Turbo","Plomo","Cuero","China",28990,645,"Nuevo","https://images.unsplash.com/photo-1504215680853-026ed2a45def?auto=format&fit=crop&w=1200&q=84",1],
-  ["U-31004","usados","automovil","Cuenca","Mazda","Mazda 3 Core",2020,61231,"4x2","Automática","Gasolina","2.0","Rojo","Tela","Japón",20800,484,"Oportunidad","https://images.unsplash.com/photo-1553440569-bcc63803a83d?auto=format&fit=crop&w=1200&q=84",1],
-  ["U-31005","seminuevos","automovil","Guayaquil","Suzuki","Swift ISG GLS Hybrid",2024,22122,"4x2","Manual","Híbrido","1.2","Azul","Tela","Japón",16500,393,"Garantizado","https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=1200&q=84",1],
-  ["U-31006","seminuevos","suv","Quito","Mazda","CX-30 Core Hybrid",2023,22400,"4x2","Automática","Híbrido","2.0","Plomo","Cuero","México",27000,616,"Vista 360°","https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=1200&q=84",1],
-  ["N-11007","nuevos","automovil","Guayaquil","Changan","Alsvin Comfort",2026,0,"4x2","Manual","Gasolina","1.4","Blanco","Tela","China",14990,361,"Nuevo","https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?auto=format&fit=crop&w=1200&q=84",0],
-  ["U-31008","seminuevos","suv","Quito","Peugeot","3008 Active",2022,48850,"4x2","Automática","Gasolina","1.6 Turbo","Azul","Cuero","Francia",24600,570,"Garantizado","https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=1200&q=84",1],
-  ["U-31009","usados","automovil","Quito","Chevrolet","Onix Premier Turbo",2021,40000,"4x2","Automática","Gasolina","1.0 Turbo","Plateado","Tela","México",13900,338,"Oportunidad","https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=1200&q=84",0],
-  ["U-31010","seminuevos","suv","Santo Domingo","Nissan","Qashqai Sense",2020,81000,"4x2","Manual","Gasolina","2.0","Rojo","Tela","México",21500,499,"Garantizado","https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?auto=format&fit=crop&w=1200&q=84",0],
-  ["N-11011","nuevos","camioneta","Cuenca","Chevrolet","Montana Premier",2026,0,"4x2","Automática","Gasolina","1.2 Turbo","Negro","Cuero","Brasil",25990,590,"Nuevo","https://images.unsplash.com/photo-1551830820-330a71b99659?auto=format&fit=crop&w=1200&q=84",0],
-  ["U-31012","usados","suv","Guayaquil","Hyundai","Tucson TL",2019,86679,"4x2","Automática","Gasolina","2.0","Blanco","Tela","Corea del Sur",24300,552,"Oportunidad","https://images.unsplash.com/photo-1568844293986-8d0400f64c09?auto=format&fit=crop&w=1200&q=84",0]
+  ["U-31001","seminuevos","suv","Quito","Toyota","Corolla Cross Mid Hybrid",2024,12900,"4x2","Automática","Híbrido","1.8","Plomo","Tela","Japón",32500,712,"Garantizado","https://admin-web.toyota.com.ec/uploads/corolla_cross_2024_color_plomo_bad010b55c.png",1],
+  ["U-31002","seminuevos","camioneta","Guayaquil","Toyota","Hilux 2.8 CD 4x4",2022,41800,"4x4","Automática","Diesel","2.8","Blanco","Cuero","Argentina",46900,938,"Vista 360°","https://http2.mlstatic.com/D_948462-MLB106006765321_012026-C.jpg",1],
+  ["N-11003","nuevos","suv","Quito","Changan","CS55 Plus Luxury",2024,0,"4x2","Automática","Gasolina","1.5 Turbo","Plomo","Cuero","China",28990,645,"Nuevo","https://kolesa-uploads.ru/r/880x/fc8450c1-f93b-4389-9383-2a3a9e051544/changan-cs55-plus-2.jpg",1],
+  ["U-31004","usados","automovil","Cuenca","Mazda","Mazda 3 Core",2020,61231,"4x2","Automática","Gasolina","2.0","Plomo","Tela","Japón",20800,484,"Oportunidad","https://platform.cstatic-images.com/in/v2/stock_photos/bc60400c-5a92-4cf8-ba04-1234ac149973/6eeac194-0d5a-4633-83f3-d3c7729aa423.png",1],
+  ["U-31005","seminuevos","automovil","Guayaquil","Suzuki","Swift ISG GLS Hybrid",2024,22122,"4x2","Manual","Híbrido","1.2","Azul","Tela","Japón",16500,393,"Garantizado","https://images.carexpert.co.nz/resize/800/-/cms/v1/media/2024-suzuki-swift-primary-image-cutout.png",1],
+  ["U-31006","seminuevos","suv","Quito","Mazda","CX-30 Core Hybrid",2023,22400,"4x2","Automática","Híbrido","2.0","Rojo","Cuero","México",27000,616,"Vista 360°","https://cms-assets.autoscout24.com/uaddx06iwzdz/6sv2flqdJqcyS8M0Un6OJc/3202d6ebf21f2e5ad1c2fd4368472375/seo-ca-research-Mazda-CX-30-2023-18.png?w=1100",1],
+  ["N-11007","nuevos","automovil","Guayaquil","Changan","Alsvin Comfort",2024,0,"4x2","Manual","Gasolina","1.4","Blanco","Tela","China",14990,361,"Nuevo","https://www.changan.co.ug/media/tbldp5tm/vehicle-model-banner-alsvin-02.png?height=979&rnd=133366884726770000&width=1920",0],
+  ["U-31008","seminuevos","suv","Quito","Peugeot","3008 Allure",2022,48850,"4x2","Automática","Gasolina","1.6 Turbo","Azul","Cuero","Francia",24600,570,"Garantizado","https://images.clickdealer.co.uk/vehicles/7554/7554484/full/183097659.jpg",1],
+  ["U-31009","usados","automovil","Quito","Chevrolet","Onix Premier Turbo",2021,40000,"4x2","Automática","Gasolina","1.0 Turbo","Blanco","Tela","México",13900,338,"Oportunidad","https://www.comprecar.com.br/storage/vehicles/big/44b90162-8976-4cf1-9771-2d42f1c99376.webp",0],
+  ["U-31010","seminuevos","suv","Santo Domingo","Nissan","Qashqai N-Connecta",2020,81000,"4x2","Manual","Gasolina","1.3 Turbo","Negro","Tela","Reino Unido",21500,499,"Garantizado","https://img.cdn.dragon2000.net/C2306/U108239/IMG_138336-large.jpg",0],
+  ["N-11011","nuevos","camioneta","Cuenca","Chevrolet","Montana Premier",2026,0,"4x2","Automática","Gasolina","1.2 Turbo","Azul","Cuero","Brasil",25990,590,"Nuevo","https://www.chevroletnova.com.br/images/versoes/fotos/2026/01/premier-2026_17677076995.png",0],
+  ["U-31012","usados","suv","Guayaquil","Hyundai","Tucson SEL",2019,86679,"4x2","Automática","Gasolina","2.4","Blanco","Tela","Corea del Sur",24300,552,"Oportunidad","https://file.kelleybluebookimages.com/kbb/base/evox/CP/13228/2019-Hyundai-Tucson-front_13228_032_1859x904_T8T_cropped.png",0]
 ];
 const brandSeed = [
   {slug:"toyota",name:"Toyota",used:["Hilux","Fortuner","C-HR","Prius","Corolla"],fresh:["Yaris Cross","Raize","Corolla Cross","Hilux","Fortuner"],logo:`<svg fill="#EB0A1E" role="img" aria-label="Toyota" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 3.848C5.223 3.848 0 7.298 0 12c0 4.702 5.224 8.152 12 8.152S24 16.702 24 12c0-4.702-5.223-8.152-12-8.152zm7.334 3.839c0 1.08-1.725 1.913-4.488 2.246-.26-2.58-1.005-4.279-1.963-4.913 2.948.184 6.45 1.227 6.45 2.667zM12 16.401c-.96 0-1.746-1.5-1.808-4.389.577.047 1.18.072 1.808.072.628 0 1.23-.025 1.807-.072-.061 2.89-.847 4.389-1.807 4.389zm0-6.308c-.59 0-1.155-.019-1.69-.054.261-1.728.92-3.15 1.69-3.15.77 0 1.428 1.422 1.689 3.15-.535.034-1.099.054-1.689.054zm-.882-5.075c-.956.633-1.706 2.333-1.964 4.915C6.391 9.6 4.665 8.767 4.665 7.687c0-1.44 3.504-2.49 6.453-2.669zM2.037 11.68a5.265 5.265 0 011.048-3.164c.27 1.547 2.522 2.881 5.972 3.37V12c0 3.772.879 6.203 2.087 6.97-5.107-.321-9.107-3.48-9.107-7.29zm10.823 7.29c1.207-.767 2.087-3.198 2.087-6.97v-.115c3.447-.488 5.704-1.826 5.972-3.37a5.26 5.26 0 011.049 3.165c-.004 3.81-4.008 6.969-9.109 7.29z"/></svg>`},
@@ -25,30 +25,67 @@ const brandSeed = [
   {slug:"mazda",name:"Mazda",used:["CX-5","Mazda 6","CX-3","Mazda 3","CX-30"],fresh:["CX-30","CX-5","CX-60","Mazda 3","BT-50"],logo:`<svg fill="#101010" role="img" aria-label="Mazda" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11.999 12.876c-.036 0-.105-.046-.222-.26a7.531 7.531 0 00-1.975-2.353A8.255 8.255 0 007.7 9.065a17.945 17.945 0 00-.345-.136c-1.012-.4-2.061-.813-3.035-1.377A8.982 8.982 0 014 7.362c.194-.34.42-.665.67-.962a6.055 6.055 0 011.253-1.131 7.126 7.126 0 011.618-.806c1.218-.434 2.677-.647 4.458-.649 1.783.002 3.241.215 4.459.65a7.097 7.097 0 011.619.805c.471.319.892.699 1.253 1.13.25.298.475.623.67.963-.103.064-.212.129-.32.192-.976.564-2.023.977-3.037 1.376l-.345.136a8.26 8.26 0 00-2.1 1.198 7.519 7.519 0 00-1.975 2.354c-.117.213-.187.259-.224.259m0 7.072c-1.544-.002-2.798-.129-3.83-.387-1.013-.252-1.855-.64-2.576-1.188a5.792 5.792 0 01-1.392-1.537 7.607 7.607 0 01-.81-1.768 10.298 10.298 0 01-.467-2.983c0-.674.047-1.313.135-1.901 1.106.596 2.153.895 3.08 1.16l.215.06c1.29.371 2.314.857 3.135 1.488.475.368.89.793 1.23 1.264.369.508.663 1.088.877 1.725.096.289.2.468.403.468.207 0 .308-.18.405-.468a6.124 6.124 0 012.107-2.988c.82-.632 1.845-1.118 3.135-1.489l.216-.06c.926-.265 1.973-.564 3.078-1.16.09.589.136 1.227.136 1.9 0 .458-.046 1.664-.465 2.984a7.626 7.626 0 01-.809 1.768 5.789 5.789 0 01-1.396 1.537c-.723.548-1.565.936-2.574 1.188-1.035.258-2.288.385-3.833.387m9.692-14.556c-1.909-2.05-4.99-2.99-9.692-2.995-4.7.005-7.781.944-9.69 2.994C.89 6.913 0 9.018 0 11.874c0 1.579.39 5.6 3.564 7.676 1.9 1.242 4.354 2.046 8.435 2.052 4.083-.006 6.536-.81 8.437-2.052C23.609 17.474 24 13.452 24 11.874c0-2.848-.897-4.968-2.31-6.483Z"/></svg>`}
 ];
 const agencySeed = [
-  ["Quito · Granados","Av. 6 de Diciembre N43-12 y Granados","Quito","(02) 398-1001","Lun–Vie 09:00–18:00 · Sáb 10:00–17:00",-0.1807,-78.4678],
-  ["Quito · Amazonas","Av. Amazonas N38-80 y Villalengua","Quito","(02) 398-1024","Lun–Vie 09:00–18:00 · Sáb 10:00–17:00",-0.1785,-78.4861],
-  ["Guayaquil · Urdenor","Av. Juan Tanca Marengo km 2.5","Guayaquil","(04) 390-1001","Lun–Vie 09:00–18:00 · Sáb 10:00–17:00",-2.1515,-79.9092],
-  ["Guayaquil · Samborondón","Av. Samborondón km 3.5","Guayaquil","(04) 390-1033","Lun–Sáb 09:00–18:00",-2.1281,-79.8689],
-  ["Cuenca · España","Av. España 10-21","Cuenca","(07) 410-1001","Lun–Vie 09:00–18:00 · Sáb 10:00–16:00",-2.8951,-78.9872],
-  ["Santo Domingo","Av. Quito km 2","Santo Domingo","(02) 375-1001","Lun–Sáb 09:00–18:00",-0.2522,-79.1754]
+  ["1001Carros Cumbayá","María Angélica Hidrobo, a 500 m del Paseo San Francisco","Cumbayá, Quito","096 414 1111","Lun–Vie 09:00–18:00 · Sáb 10:00–17:00 · Dom cerrado",-0.1961,-78.4309],
+  ["1001Carros Bicentenario","Capitán Rafael Ramos y Av. Galo Plaza Lasso (esquina)","Quito, norte","096 414 1111","Lun–Vie 09:00–18:00 · Sáb 10:00–17:00 · Dom cerrado",-0.0950,-78.4720],
+  ["1001Carros Carrión","Calle Carrión 1030 y Av. 10 de Agosto","Quito, centro-norte","096 414 1111","Lun–Vie 09:00–18:00 · Sáb 10:00–17:00 · Dom cerrado",-0.1980,-78.4960],
+  ["1001Carros Chillos","Av. San Luis S/N y 9na. Transversal","Valle de los Chillos, Quito","096 414 1111","Lun–Vie 09:00–18:00 · Sáb 10:00–17:00 · Dom cerrado",-0.2860,-78.4420],
+  ["1001Carros Sur","Av. Maldonado S/N y El Tablón (frente a El Comercio)","Quito, sur","096 414 1111","Lun–Vie 09:00–18:00 · Sáb 10:00–17:00 · Dom cerrado",-0.3180,-78.5480],
+  ["1001Carros Alcívar","Miguel H. Alcívar y Justino, frente al Parque Japonés","Guayaquil","096 414 1111","Lun–Vie 09:00–18:00 · Sáb 10:00–17:00 · Dom cerrado",-2.1700,-79.8980],
+  ["1001Carros Daule","Km 9.5 vía a Daule, frente a Fuerte Huancavilca","Guayaquil","096 414 1111","Lun–Vie 09:00–18:00 · Sáb 10:00–17:00 · Dom cerrado",-2.1000,-79.9200]
 ];
 
-export function openStore(path) {
-  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-  const db = new DatabaseSync(path);
-  db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
-    CREATE TABLE IF NOT EXISTS vehicles (id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT UNIQUE NOT NULL,condition TEXT NOT NULL,category TEXT NOT NULL,city TEXT NOT NULL,brand TEXT NOT NULL,model TEXT NOT NULL,year INTEGER NOT NULL,mileage INTEGER NOT NULL DEFAULT 0,drive TEXT,transmission TEXT,fuel TEXT,engine TEXT,color TEXT,upholstery TEXT,origin TEXT,price INTEGER NOT NULL,monthly INTEGER,badge TEXT,image TEXT,featured INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'available',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-    CREATE TABLE IF NOT EXISTS agencies (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE NOT NULL,address TEXT NOT NULL,city TEXT NOT NULL,phone TEXT NOT NULL,hours TEXT NOT NULL,lat REAL,lng REAL);
-    CREATE TABLE IF NOT EXISTS brands (id INTEGER PRIMARY KEY AUTOINCREMENT,slug TEXT UNIQUE NOT NULL,name TEXT UNIQUE NOT NULL,models_seminuevos TEXT NOT NULL,models_nuevos TEXT NOT NULL,logo_svg TEXT NOT NULL,sort_order INTEGER NOT NULL DEFAULT 0);
-    CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT,kind TEXT NOT NULL,name TEXT,email TEXT,phone TEXT,vehicle_id INTEGER,plate TEXT,message TEXT,status TEXT NOT NULL DEFAULT 'new',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(vehicle_id) REFERENCES vehicles(id));
-    CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-    CREATE TABLE IF NOT EXISTS favorites (user_id INTEGER NOT NULL,vehicle_id INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(user_id,vehicle_id),FOREIGN KEY(user_id) REFERENCES users(id),FOREIGN KEY(vehicle_id) REFERENCES vehicles(id));`);
-  if (db.prepare("SELECT COUNT(*) count FROM vehicles").get().count===0) { const insert=db.prepare("INSERT INTO vehicles (code,condition,category,city,brand,model,year,mileage,drive,transmission,fuel,engine,color,upholstery,origin,price,monthly,badge,image,featured) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"); for(const row of vehicleSeed) insert.run(...row); }
-  if (db.prepare("SELECT COUNT(*) count FROM agencies").get().count===0) { const insert=db.prepare("INSERT INTO agencies (name,address,city,phone,hours,lat,lng) VALUES (?,?,?,?,?,?,?)"); for(const row of agencySeed) insert.run(...row); }
-  if (db.prepare("SELECT COUNT(*) count FROM brands").get().count===0) { const insert=db.prepare("INSERT INTO brands (slug,name,models_seminuevos,models_nuevos,logo_svg,sort_order) VALUES (?,?,?,?,?,?)"); brandSeed.forEach((brand,index)=>insert.run(brand.slug,brand.name,JSON.stringify(brand.used),JSON.stringify(brand.fresh),brand.logo,index)); }
-  const updateBrandLogo=db.prepare("UPDATE brands SET logo_svg=? WHERE slug=?");
-  brandSeed.forEach(brand=>updateBrandLogo.run(brand.logo,brand.slug));
-  return db;
+const schemaSql=`
+  CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY,value TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS vehicles (id SERIAL PRIMARY KEY,code TEXT UNIQUE NOT NULL,condition TEXT NOT NULL,category TEXT NOT NULL,city TEXT NOT NULL,brand TEXT NOT NULL,model TEXT NOT NULL,year INTEGER NOT NULL,mileage INTEGER NOT NULL DEFAULT 0,drive TEXT,transmission TEXT,fuel TEXT,engine TEXT,color TEXT,upholstery TEXT,origin TEXT,price INTEGER NOT NULL,monthly INTEGER,badge TEXT,image TEXT,featured BOOLEAN NOT NULL DEFAULT FALSE,status TEXT NOT NULL DEFAULT 'available',created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS agencies (id SERIAL PRIMARY KEY,name TEXT UNIQUE NOT NULL,address TEXT NOT NULL,city TEXT NOT NULL,phone TEXT NOT NULL,hours TEXT NOT NULL,lat DOUBLE PRECISION,lng DOUBLE PRECISION);
+  CREATE TABLE IF NOT EXISTS brands (id SERIAL PRIMARY KEY,slug TEXT UNIQUE NOT NULL,name TEXT UNIQUE NOT NULL,models_seminuevos JSONB NOT NULL,models_nuevos JSONB NOT NULL,logo_svg TEXT NOT NULL,sort_order INTEGER NOT NULL DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS leads (id SERIAL PRIMARY KEY,kind TEXT NOT NULL,name TEXT,email TEXT,phone TEXT,vehicle_id INTEGER REFERENCES vehicles(id),plate TEXT,message TEXT,status TEXT NOT NULL DEFAULT 'new',created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY,name TEXT NOT NULL,email TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS favorites (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,vehicle_id INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(user_id,vehicle_id));
+  CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,expires_at TIMESTAMPTZ NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+  CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at);
+  CREATE INDEX IF NOT EXISTS vehicles_catalog_idx ON vehicles(status,condition,category,brand);
+`;
+
+const seedVersion="2026-10-26-official-agencies-1";
+const vehicleColumns=["code","condition","category","city","brand","model","year","mileage","drive","transmission","fuel","engine","color","upholstery","origin","price","monthly","badge","image","featured"];
+const placeholders=count=>Array.from({length:count},(_,index)=>`$${index+1}`).join(",");
+
+async function seed(client){
+  const current=await client.query("SELECT value FROM app_meta WHERE key='seed_version'");
+  if(current.rows[0]?.value===seedVersion)return;
+  for(const row of vehicleSeed)await client.query(`INSERT INTO vehicles (${vehicleColumns.join(",")}) VALUES (${placeholders(row.length)}) ON CONFLICT (code) DO UPDATE SET condition=EXCLUDED.condition,category=EXCLUDED.category,city=EXCLUDED.city,brand=EXCLUDED.brand,model=EXCLUDED.model,year=EXCLUDED.year,mileage=EXCLUDED.mileage,drive=EXCLUDED.drive,transmission=EXCLUDED.transmission,fuel=EXCLUDED.fuel,engine=EXCLUDED.engine,color=EXCLUDED.color,upholstery=EXCLUDED.upholstery,origin=EXCLUDED.origin,price=EXCLUDED.price,monthly=EXCLUDED.monthly,badge=EXCLUDED.badge,image=EXCLUDED.image,featured=EXCLUDED.featured`,[...row.slice(0,19),Boolean(row[19])]);
+  for(const row of agencySeed)await client.query(`INSERT INTO agencies (name,address,city,phone,hours,lat,lng) VALUES (${placeholders(row.length)}) ON CONFLICT (name) DO UPDATE SET address=EXCLUDED.address,city=EXCLUDED.city,phone=EXCLUDED.phone,hours=EXCLUDED.hours,lat=EXCLUDED.lat,lng=EXCLUDED.lng`,row);
+  await client.query("DELETE FROM agencies WHERE name = ANY($1::text[])",[["Quito · Granados","Quito · Amazonas","Guayaquil · Urdenor","Guayaquil · Samborondón","Cuenca · España","Santo Domingo"]]);
+  for(const [index,brand] of brandSeed.entries())await client.query("INSERT INTO brands (slug,name,models_seminuevos,models_nuevos,logo_svg,sort_order) VALUES ($1,$2,$3::jsonb,$4::jsonb,$5,$6) ON CONFLICT (slug) DO UPDATE SET name=EXCLUDED.name,models_seminuevos=EXCLUDED.models_seminuevos,models_nuevos=EXCLUDED.models_nuevos,logo_svg=EXCLUDED.logo_svg,sort_order=EXCLUDED.sort_order",[brand.slug,brand.name,JSON.stringify(brand.used),JSON.stringify(brand.fresh),brand.logo,index]);
+  await client.query("INSERT INTO app_meta (key,value) VALUES ('seed_version',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value",[seedVersion]);
 }
+
+export function createStore(pool){
+  let ready;
+  const initialize=()=>{if(!ready)ready=(async()=>{const client=await pool.connect();try{await client.query("BEGIN");await client.query(schemaSql);await seed(client);await client.query("COMMIT");}catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}})().catch(error=>{ready=null;throw error;});return ready;};
+  const run=async(text,params=[])=>{await initialize();return pool.query(text,params);};
+  return {
+    initialize,
+    async listVehicles(filters={}){const clauses=["status='available'"],params=[],fields={condition:"condition",category:"category",city:"city",brand:"brand",fuel:"fuel",transmission:"transmission"},add=(sql,value)=>{params.push(value);clauses.push(sql.replace("?",`$${params.length}`));};for(const [query,field] of Object.entries(fields))if(filters[query])add(`LOWER(${field})=LOWER(?)`,filters[query]);if(filters.catalogType==="nuevos")clauses.push("condition='nuevos'");else if(filters.catalogType==="usados")clauses.push("condition!='nuevos'");if(filters.q)add("LOWER(brand||' '||model||' '||year::text||' '||fuel||' '||city) LIKE LOWER(?)",`%${filters.q}%`);for(const [key,sql] of [["minPrice","price>=?"],["maxPrice","price<=?"],["minMileage","mileage>=?"],["maxMileage","mileage<=?"]])if(filters[key])add(sql,Number(filters[key]));const order={"price-asc":"price ASC","price-desc":"price DESC","year-desc":"year DESC","mileage-asc":"mileage ASC"}[filters.sort]||"featured DESC,created_at DESC";return (await run(`SELECT * FROM vehicles WHERE ${clauses.join(" AND ")} ORDER BY ${order}`,params)).rows;},
+    async getVehicle(id){return (await run("SELECT * FROM vehicles WHERE id=$1",[id])).rows[0]||null;},
+    async listAgencies(){return (await run("SELECT * FROM agencies ORDER BY city,name")).rows;},
+    async listBrands(condition){const rows=(await run("SELECT id,slug,name,models_seminuevos,models_nuevos,logo_svg FROM brands ORDER BY sort_order,name")).rows;return rows.map(row=>({id:row.id,slug:row.slug,name:row.name,logoSvg:row.logo_svg,models:condition==="nuevos"?row.models_nuevos:row.models_seminuevos}));},
+    async stats(){const row=(await run("SELECT COUNT(*)::int vehicles,COUNT(DISTINCT brand)::int brands,COUNT(DISTINCT city)::int cities FROM vehicles WHERE status='available'")).rows[0];return row;},
+    async createLead(data){return (await run("INSERT INTO leads (kind,name,email,phone,vehicle_id,plate,message) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",[data.kind,data.name||null,data.email||null,data.phone||null,data.vehicleId||null,data.plate||null,data.message||null])).rows[0].id;},
+    async registerUser({name,email,passwordHash}){return (await run("INSERT INTO users (name,email,password_hash) VALUES ($1,$2,$3) RETURNING id,name,email",[name,email,passwordHash])).rows[0];},
+    async findUserByEmail(email){return (await run("SELECT * FROM users WHERE email=$1",[email])).rows[0]||null;},
+    async createSession(userId,token){const now=new Date(),expiresAt=new Date(now.getTime()+30*24*60*60*1000);await run("DELETE FROM sessions WHERE expires_at<=$1",[now]);await run("INSERT INTO sessions (token,user_id,expires_at) VALUES ($1,$2,$3)",[token,userId,expiresAt]);},
+    async sessionUser(token){if(!token)return null;return (await run("SELECT u.id,u.name,u.email FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=$1 AND s.expires_at>$2",[token,new Date()])).rows[0]||null;},
+    async listFavorites(userId){return (await run("SELECT v.* FROM favorites f JOIN vehicles v ON v.id=f.vehicle_id WHERE f.user_id=$1 ORDER BY f.created_at DESC",[userId])).rows;},
+    async saveFavorite(userId,vehicleId){await run("INSERT INTO favorites (user_id,vehicle_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",[userId,vehicleId]);},
+    async deleteFavorite(userId,vehicleId){await run("DELETE FROM favorites WHERE user_id=$1 AND vehicle_id=$2",[userId,vehicleId]);},
+    async counts(){const [vehicles,agencies,brands,leads]=await Promise.all([run("SELECT COUNT(*)::int count FROM vehicles"),run("SELECT COUNT(*)::int count FROM agencies"),run("SELECT COUNT(*)::int count FROM brands"),run("SELECT COUNT(*)::int count FROM leads")]);return {vehicles:vehicles.rows[0].count,agencies:agencies.rows[0].count,brands:brands.rows[0].count,leads:leads.rows[0].count};},
+    async close(){await pool.end();}
+  };
+}
+
+let defaultStore;
+export function getStore(){if(defaultStore)return defaultStore;const connectionString=process.env.DATABASE_URL;if(!connectionString)throw new Error("Falta DATABASE_URL. Configura una conexión PostgreSQL antes de iniciar la aplicación.");const pool=new Pool({connectionString,max:Number(process.env.PG_POOL_MAX||5),idleTimeoutMillis:30000,connectionTimeoutMillis:10000});defaultStore=createStore(pool);return defaultStore;}
 export function hashPassword(password){const salt=randomBytes(16).toString("hex");return `${salt}:${scryptSync(password,salt,64).toString("hex")}`;}
-export function verifyPassword(password,stored){const [salt,key]=stored.split(":");return timingSafeEqual(Buffer.from(key,"hex"),scryptSync(password,salt,64));}
+export function verifyPassword(password,stored){try{const [salt,key]=String(stored||"").split(":");const storedKey=Buffer.from(key,"hex"),candidate=scryptSync(password,salt,64);return storedKey.length===candidate.length&&timingSafeEqual(storedKey,candidate);}catch{return false;}}

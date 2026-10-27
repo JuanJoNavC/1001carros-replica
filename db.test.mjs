@@ -1,23 +1,33 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { openStore, hashPassword, verifyPassword } from "./db.mjs";
+import { newDb } from "pg-mem";
+import { createStore, hashPassword, verifyPassword } from "./db.mjs";
 
-test("crea y siembra el catálogo persistente", () => {
-  const db=openStore(":memory:");
-  const stats=db.prepare("SELECT COUNT(*) vehicles, COUNT(DISTINCT city) cities FROM vehicles").get();
+function memoryStore(){const database=newDb();const adapter=database.adapters.createPg(),pool=new adapter.Pool();return createStore(pool);}
+
+test("crea y siembra el catálogo PostgreSQL",async()=>{
+  const store=memoryStore();
+  await store.initialize();
+  assert.deepEqual(await store.counts(),{vehicles:12,agencies:7,brands:5,leads:0});
+  const stats=await store.stats();
   assert.equal(stats.vehicles,12);
   assert.equal(stats.cities,4);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM agencies").get().count,6);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM brands").get().count,5);
-  assert.match(db.prepare("SELECT logo_svg FROM brands WHERE slug='toyota'").get().logo_svg,/^<svg/);
-  db.close();
+  const brands=await store.listBrands("seminuevos");
+  assert.equal(brands.length,5);
+  assert.match(brands.find(brand=>brand.slug==="toyota").logoSvg,/^<svg/);
+  await store.close();
 });
 
-test("almacena prospectos y protege contraseñas", () => {
-  const db=openStore(":memory:"),hash=hashPassword("secreto123");
+test("almacena prospectos, sesiones y favoritos",async()=>{
+  const store=memoryStore(),hash=hashPassword("secreto123");
   assert.equal(verifyPassword("secreto123",hash),true);
   assert.equal(verifyPassword("incorrecta",hash),false);
-  db.prepare("INSERT INTO leads (kind,phone,plate) VALUES (?,?,?)").run("sell","0999999999","ABC-1234");
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM leads").get().count,1);
-  db.close();
+  await store.createLead({kind:"sell",phone:"0999999999",plate:"ABC-1234"});
+  const user=await store.registerUser({name:"Prueba",email:"prueba@example.com",passwordHash:hash});
+  await store.createSession(user.id,"token-prueba");
+  assert.equal((await store.sessionUser("token-prueba")).email,"prueba@example.com");
+  await store.saveFavorite(user.id,1);
+  assert.equal((await store.listFavorites(user.id)).length,1);
+  assert.equal((await store.counts()).leads,1);
+  await store.close();
 });

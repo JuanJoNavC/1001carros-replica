@@ -2,9 +2,19 @@
   "name": "1001carros-clone",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "node serve.mjs",
     "start": "node serve.mjs",
-    "test": "node --test"
+    "test": "node --test",
+    "db:migrate:sqlite": "node scripts/migrate-sqlite-to-postgres.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "pg-mem": "^3.0.14"
   }
 }

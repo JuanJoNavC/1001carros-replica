@@ -19,7 +19,7 @@
       </a>
       <button class="menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span></span><span></span><span></span></button>
       <nav class="main-nav" aria-label="Navegación principal">
-        <a href="/" data-route data-nav-section="inicio">Inicio</a><a href="/seminuevos" data-route data-nav-section="comprar">Comprar</a><a href="/vender" data-route data-nav-section="vender">Vender</a>
+        <a href="/" data-route data-nav-section="inicio">Inicio</a><a href="/catalogo" data-route data-nav-section="comprar">Comprar</a><a href="/vender" data-route data-nav-section="vender">Vender</a>
       </nav>
       <div class="header-actions">
         <span class="country-link" aria-label="Ecuador" title="Ecuador"><img class="ecuador-flag" src="https://flagcdn.com/ec.svg" alt="" width="20" height="20" /></span>
@@ -31,12 +31,39 @@
       </div>
     </header>
     <main id="app" tabindex="-1"><div class="page-loader"><span></span><p>Cargando catálogo…</p></div></main>
-    <footer>
-      <div class="footer-brand"><a class="brand brand-light" href="/" data-route><span class="brand-mark">1001</span><span>Carros.com</span></a><p>Tu próximo carro empieza con una buena decisión.</p></div>
-      <div><strong>Comprar</strong><a href="/nuevos" data-route>Nuevos</a><a href="/seminuevos" data-route>Seminuevos</a><a href="/usados" data-route>Usados</a></div>
-      <div><strong>Servicios</strong><a href="/vender" data-route>Vender mi carro</a><a href="/financiamiento" data-route>Financiamiento</a><a href="/agencias" data-route>Agencias</a></div>
-      <div><strong>Mi cuenta</strong><a href="/login" data-route>Iniciar sesión</a><a href="/favoritos" data-route>Favoritos</a><a href="/contacto" data-route>Contáctanos</a></div>
-      <p class="footer-bottom">© 2026 Prototipo educativo inspirado en 1001Carros.com. No es el sitio oficial.</p>
+    <footer class="site-footer">
+      <div class="footer-links-grid">
+        <nav aria-label="Catálogo y agencias">
+          <a href="/catalogo" data-route>STOCK 1001Carros.com</a>
+          <a href="/vender" data-route>Quiero vender</a>
+          <a href="/agencias" data-route>Agencias</a>
+        </nav>
+        <nav aria-label="Empresa y contacto">
+          <a href="/contacto" data-route>Trabaja con nosotros</a>
+          <a href="/contacto" data-route>Contáctanos</a>
+        </nav>
+        <nav class="footer-legal" aria-label="Información legal">
+          <a href="#terminos">Términos y condiciones</a>
+          <a href="#privacidad">Políticas de Privacidad</a>
+          <a href="#garantia-changan">Garantía De Por Vida Changan V3</a>
+          <a href="#punta-centinela">Términos y Condiciones - Punta Centinela Changan</a>
+          <a href="#sorteo-changan">TÉRMINOS Y CONDICIONES - SORTEO CHANGAN 0KM</a>
+          <a href="#baja-datos">Baja de datos personales</a>
+          <a href="#mapa">Mapa del sitio</a>
+        </nav>
+      </div>
+      <div class="footer-community">
+        <a class="footer-logo" href="/" data-route aria-label="1001Carros.com, inicio"><img src="https://admin.changanecuador.com/uploads/1001carros_logo_df05660ab3.svg" alt="1001Carros.com" width="143" height="24"></a>
+        <nav class="footer-socials" aria-label="Redes sociales">
+          <a href="https://www.youtube.com/" target="_blank" rel="noopener" aria-label="YouTube"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.2a2.8 2.8 0 0 0-2-2C17.2 4.7 12 4.7 12 4.7s-5.2 0-7 .5a2.8 2.8 0 0 0-2 2A29 29 0 0 0 2.5 12 29 29 0 0 0 3 16.8a2.8 2.8 0 0 0 2 2c1.8.5 7 .5 7 .5s5.2 0 7-.5a2.8 2.8 0 0 0 2-2 29 29 0 0 0 .5-4.8 29 29 0 0 0-.5-4.8ZM10 15.3V8.7l5.7 3.3-5.7 3.3Z"/></svg></a>
+          <a href="https://www.tiktok.com/" target="_blank" rel="noopener" aria-label="TikTok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.2 3c.3 2.3 1.6 3.7 3.8 3.9v3.2a8 8 0 0 1-3.8-1v6.2a5.8 5.8 0 1 1-5-5.7v3.3a2.6 2.6 0 1 0 1.8 2.4V3h3.2Z"/></svg></a>
+          <a href="https://wa.me/" target="_blank" rel="noopener" aria-label="WhatsApp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.7a8.5 8.5 0 0 1-12.6 7.4L3 20.4l1.3-4.7a8.5 8.5 0 1 1 16.2-4Zm-4.3 2c-.2-.1-1.4-.7-1.6-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1-1.4-.7-2.4-1.3-3.4-3-.3-.5.3-.5.8-1.5.1-.2 0-.4 0-.5l-.7-1.8c-.2-.4-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.8.8-1.2 1.8-1.1 2.9.2 2.9 2.6 5.6 5.4 6.7 2.1.8 3 .9 4.1.8.9-.1 2.8-1.1 3.2-2.2.4-1.1.4-2 .3-2.2-.2-.2-.4-.3-.7-.4Z"/></svg></a>
+          <a href="https://www.instagram.com/" target="_blank" rel="noopener" aria-label="Instagram"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.6" r="1" class="social-dot"/></svg></a>
+          <a href="https://www.facebook.com/" target="_blank" rel="noopener" aria-label="Facebook"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 21v-8h2.8l.4-3H14V8.1c0-.9.3-1.6 1.7-1.6h1.8V3.8c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5V10H7.6v3h2.9v8H14Z"/></svg></a>
+          <a href="https://www.linkedin.com/" target="_blank" rel="noopener" aria-label="LinkedIn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 8.2A2 2 0 1 0 6.5 4a2 2 0 0 0 0 4.2ZM4.8 20h3.4V10H4.8v10Zm5.5 0h3.4v-5.6c0-1.5.3-3 2.2-3s2 1.7 2 3.1V20h3.4v-6.1c0-3-1.6-4.4-3.8-4.4-1.8 0-2.6 1-3 1.7h-.1V10h-3.3v10Z"/></svg></a>
+        </nav>
+        <p>Copyright © 2026. Casabaca S.A. Todos los derechos reservados.</p>
+      </div>
     </footer>
     <div class="compare-bar" id="compare-bar" hidden><div><strong>Comparar vehículos</strong><span id="compare-count">0 de 3 seleccionados</span></div><div id="compare-thumbs"></div><button type="button" id="compare-action">Comparar ahora</button><button class="compare-close" id="compare-close" type="button" aria-label="Vaciar comparación">×</button></div>
     <div class="modal-backdrop" id="modal" hidden></div><div class="toast" id="toast" role="status" aria-live="polite"></div>
