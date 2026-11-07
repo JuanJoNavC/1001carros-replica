@@ -40,3 +40,20 @@ test("almacena prospectos, sesiones y favoritos",async()=>{
   assert.equal((await store.counts()).leads,1);
   await store.close();
 });
+
+test("cada vehículo sembrado conoce la agencia donde se encuentra",async()=>{
+  const store=memoryStore();
+  await store.initialize();
+  const agencies=await store.listAgencies(),names=agencies.map(agency=>agency.name);
+  const vehicles=await store.listVehicles();
+  assert.equal(vehicles.length,12);
+  for(const listed of vehicles){
+    const vehicle=await store.getVehicle(listed.id);
+    assert.ok(vehicle.agency,`${vehicle.code} sin agencia`);
+    assert.ok(names.includes(vehicle.agency.name),`${vehicle.code}: ${vehicle.agency.name}`);
+  }
+  const swift=vehicles.find(item=>item.code==="U-31005"),detail=await store.getVehicle(swift.id);
+  assert.equal(detail.agency.name,"1001Carros Daule");
+  assert.deepEqual(Object.keys(detail.agency).sort(),["address","city","hours","lat","lng","name","phone"]);
+  await store.close();
+});

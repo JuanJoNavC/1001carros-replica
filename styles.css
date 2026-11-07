@@ -621,7 +621,7 @@ button { cursor: pointer; }
 .vehicle-heading h1 { margin:0 0 10px; color:#172033; font-size:23px; line-height:1.35; letter-spacing:-.025em; text-transform:uppercase; }
 .vehicle-heading > span { color:#303b50; font-size:14px; }
 .detail-bonus { min-height:32px; display:grid; place-items:center; margin-bottom:8px; border-radius:3px; background:#3d348b; color:white; font-size:12px; }
-.price-card,.detail-finance-card,.detail-contact-card,.satisfaction-card { margin-bottom:10px; border:1px solid #dfe2e8; border-radius:7px; background:white; }
+.price-card,.detail-location-card,.detail-finance-card,.detail-contact-card,.satisfaction-card { margin-bottom:10px; border:1px solid #dfe2e8; border-radius:7px; background:white; }
 .price-card { padding:0 9px 7px; }
 .price-card header { min-height:40px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e1e4e9; font-size:12px; }
 .price-card header b { width:20px; height:20px; display:grid; place-items:center; border:2px solid var(--detail-green); border-radius:50%; color:var(--detail-green); }
@@ -632,6 +632,14 @@ button { cursor: pointer; }
 .price-card p { min-height:33px; display:flex; align-items:center; gap:10px; margin:0; border-bottom:1px solid #e1e4e9; color:#7a8498; font-size:10px; }
 .price-card p:last-child { border-bottom:0; }
 .price-card p b,.detail-benefits b { width:13px; height:13px; display:grid; place-items:center; flex:0 0 auto; border-radius:50%; background:var(--detail-green); color:white; font-size:8px; }
+.detail-location-card { padding:19px 25px; }
+.detail-location-card h2 { margin:0 0 12px; color:#172033; font-size:18px; }
+.detail-location-card > strong { display:block; margin-bottom:10px; color:#30258c; font-size:13px; }
+.detail-location-card dl { margin:0; }
+.detail-location-card dl div { display:flex; justify-content:space-between; gap:14px; padding:7px 0; border-top:1px solid #e1e4e9; font-size:11px; }
+.detail-location-card dt { flex:0 0 auto; color:#7a8498; font-weight:800; }
+.detail-location-card dd { margin:0; color:#303b50; text-align:right; }
+.detail-location-card a { display:inline-block; margin-top:10px; color:#4631b1; font-size:11px; font-weight:800; }
 .detail-finance-card { padding:19px 25px; }
 .detail-finance-card h2,.detail-contact-card h2,.satisfaction-card h2 { margin:0 0 17px; color:#172033; font-size:18px; }
 .detail-finance-card label { display:block; color:#303b50; font-size:11px; }
@@ -963,7 +971,7 @@ button { cursor: pointer; }
   .detail-main-layout { grid-template-columns:1fr; }
   .detail-side-column { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
   .vehicle-heading,.detail-bonus { grid-column:1/-1; }
-  .price-card,.detail-finance-card,.detail-contact-card,.satisfaction-card { margin-bottom:0; }
+  .price-card,.detail-location-card,.detail-finance-card,.detail-contact-card,.satisfaction-card { margin-bottom:0; }
   .similar-detail-track { grid-template-columns:repeat(5,245px); }
   .vehicle-sticky-bar { grid-template-columns:1fr auto auto; padding:0 20px; }
   .vehicle-sticky-bar > button:not(.sticky-reserve) { display:none; }
@@ -1054,3 +1062,8 @@ button { cursor: pointer; }
   .agency-picker-list { padding-right:21px; padding-left:21px; }
 }
 }
+.detail-location-card a.detail-location-link { display:block; margin-top:14px; padding:10px 12px; border-radius:8px; background:#4631b1; color:#fff; text-align:center; font-size:12px; }
+.agency-card.is-selected { grid-column:1 / -1; border-color:var(--yellow-deep); box-shadow:0 0 0 2px var(--yellow-deep); position:relative; }
+.agency-selected-badge { position:absolute; top:12px; right:12px; z-index:1; padding:5px 10px; border-radius:99px; background:var(--yellow-deep); color:#fff; font-size:10px; }
+.detail-location-card a { margin-right:14px; }
+.detail-location-card a.detail-location-link { margin-right:0; margin-bottom:10px; }
