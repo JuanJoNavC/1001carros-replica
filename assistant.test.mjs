@@ -134,3 +134,37 @@ test("agency step matches a partial name such as 'cumbaya' against '1001Carros C
   assert.equal(r.flow.step, "datetime");
   assert.equal(r.flow.agencyId, 7);
 });
+
+const LATE = new Date("2026-11-13T01:00:00Z"); // Ecuador (GMT-5): 2026-11-12 20:00
+const dtFlow = { step: "datetime", carId: 1, agencyId: 1 };
+test("tz: 'manana' uses the Ecuador calendar date", () => {
+  const r = answer("mañana a las 10:00", ctx({ now: LATE, flow: dtFlow }));
+  assert.match(r.text, /2026-11-13/);
+});
+test("tz: 'hoy' later today (Ecuador) is accepted", () => {
+  const r = answer("hoy a las 21:00", ctx({ now: LATE, flow: dtFlow }));
+  assert.match(r.text, /2026-11-12/);
+  assert.equal(r.flow, null);
+});
+test("tz: 'hoy' earlier than the current Ecuador time is rejected as past", () => {
+  const r = answer("hoy a las 08:00", ctx({ now: LATE, flow: dtFlow }));
+  assert.match(r.text, /ya pas/);
+  assert.equal(r.flow.step, "datetime");
+});
+test("tz: yesterday in Ecuador is past even if UTC date is today", () => {
+  const r = answer("12/11 a las 21:00", ctx({ now: new Date("2026-11-13T06:00:00Z"), flow: dtFlow }));
+  assert.match(r.text, /ya pas/);
+});
+test("intent: 'solicitar' / 'capacitacion' do not trigger test drive", () => {
+  assert.notEqual(answer("quiero solicitar un credito", ctx()).intent, "test-drive");
+  assert.equal(answer("quiero solicitar un credito", ctx()).intent, "credito");
+  assert.notEqual(answer("capacitacion", ctx()).intent, "test-drive");
+});
+test("intent: real 'cita' phrases still trigger test drive", () => {
+  for (const t of ["quiero una cita", "agendar una cita", "cita para test drive"])
+    assert.equal(answer(t, ctx()).intent, "test-drive", t);
+});
+test("intent: punctuation and plurals still trigger test drive", () => {
+  for (const t of ["quiero una cita.", "quiero un test drive, por favor", "quiero agendar citas"])
+    assert.equal(answer(t, ctx()).intent, "test-drive", t);
+});

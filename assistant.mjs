@@ -41,8 +41,12 @@ function parseMaxPrice(n) {
 
 const DAYS = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
 const iso = d => d.toISOString().slice(0, 10);
+const ecShift = now => new Date(now.getTime() - 5 * 36e5); // Ecuador is fixed GMT-5
+const ecToday = now => { const s = ecShift(now); return new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate())); };
+// Whole-word match that tolerates a plural suffix and trailing punctuation ("citas", "cita.", "drive,").
+const hasWord = (n, words) => words.some(w => new RegExp(`(^| )${w}(s|es)?(?=[ .,:]|$)`).test(n));
 export function parseWhen(n, now) {
-  const base = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const base = ecToday(now);
   let date = null, m;
   if (/\bpasado manana\b/.test(n)) date = new Date(base.getTime() + 2 * 864e5);
   else if (/\bmanana\b/.test(n)) date = new Date(base.getTime() + 864e5);
@@ -81,8 +85,9 @@ function testDriveStep(n, ctx, flow) {
     return reply(`¿En qué agencia? ${agencies.map(a => a.name).join(", ")}.`, { intent: "test-drive", flow, chips: [...agencies.slice(0, 4).map(a => a.name), "Cancelar"] });
   }
   const when = parseWhen(n, now);
-  if (when.date && when.date < iso(now)) return reply("Esa fecha ya pasó. ¿Qué día y hora te acomoda? Por ejemplo «mañana a las 15:00».", { intent: "test-drive", flow, chips });
+  if (when.date && when.date < iso(ecToday(now))) return reply("Esa fecha ya pasó. ¿Qué día y hora te acomoda? Por ejemplo «mañana a las 15:00».", { intent: "test-drive", flow, chips });
   const next = { ...flow, date: when.date || flow.date || null, time: when.time || flow.time || null };
+  if (next.date && next.time && next.date === iso(ecToday(now))) { const e = ecShift(now); if (next.time < `${String(e.getUTCHours()).padStart(2, "0")}:${String(e.getUTCMinutes()).padStart(2, "0")}`) return reply("Esa hora ya pasó. ¿Qué día y hora te acomoda? Por ejemplo «mañana a las 15:00».", { intent: "test-drive", flow: { ...flow, date: null, time: null }, chips }); }
   if (!next.date || !next.time) return reply(`${next.date ? `Anoté el ${next.date}. ` : ""}Necesito ${next.date ? "la hora" : next.time ? "el día" : "el día y la hora"}. Por ejemplo «mañana a las 15:00» o «20/11 a las 10:00».`, { intent: "test-drive", flow: next, chips });
   const car = vehicles.find(c => c.id === next.carId), agency = agencies.find(a => a.id === next.agencyId);
   const text = `Listo, esto es lo que anoté: ${car ? carLabel(car) : "tu carro"}${agency ? ` en ${agency.name}` : ""}, el ${next.date} a las ${next.time}. Es una solicitud: un asesor la confirmará. Para dejarla registrada, continúa en la reserva.`;
@@ -100,7 +105,7 @@ export function answer(message, context = {}) {
     if (!has(n, ["asesor", "humano"])) return testDriveStep(n, ctx, ctx.flow);
   }
   if (has(n, ["asesor", "humano", "agente", "persona real", "vendedor", "hablar con alguien"])) return handoff("Claro, te paso con un asesor por WhatsApp. Se abrirá un mensaje con el resumen de nuestra conversación para que no repitas nada.");
-  if (has(n, ["test drive", "prueba de manejo", "probar el", "agendar", "agenda", "cita"])) {
+  if (hasWord(n, ["test drive", "prueba de manejo", "probar el", "agendar", "agenda", "cita"])) {
     const found = findCars(n, vehicles);
     const carId = found.length === 1 ? found[0].id : ctx.currentVehicleId || null;
     return testDriveStep("", ctx, { step: carId ? "agency" : "car", carId });
