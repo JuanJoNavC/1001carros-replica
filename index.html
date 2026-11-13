@@ -19,7 +19,7 @@
       </a>
       <button class="menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false"><span></span><span></span><span></span></button>
       <nav class="main-nav" aria-label="Navegación principal">
-        <a href="/" data-route data-nav-section="inicio">Inicio</a><a href="/catalogo" data-route data-nav-section="comprar">Comprar</a><a href="/vender" data-route data-nav-section="vender">Vender</a>
+        <a href="/" data-route data-nav-section="inicio">Inicio</a><a href="/catalogo" data-route data-nav-section="comprar">Comprar</a><a href="/vender" data-route data-nav-section="vender">Vender</a><a href="/login" data-route class="nav-account" id="nav-account">Iniciar sesión</a>
       </nav>
       <div class="header-actions">
         <span class="country-link" aria-label="Ecuador" title="Ecuador"><img class="ecuador-flag" src="https://flagcdn.com/ec.svg" alt="" width="20" height="20" /></span>
@@ -28,6 +28,7 @@
           <span class="account-name">Iniciar sesión</span>
           <svg class="account-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
         </a>
+        <button class="header-logout" type="button" id="header-logout" data-logout hidden>Cerrar sesión</button>
       </div>
     </header>
     <main id="app" tabindex="-1"><div class="page-loader"><span></span><p>Cargando catálogo…</p></div></main>
@@ -68,5 +69,6 @@
     <div class="compare-bar" id="compare-bar" hidden><div><strong>Comparar vehículos</strong><span id="compare-count">0 de 3 seleccionados</span></div><div id="compare-thumbs"></div><button type="button" id="compare-action">Comparar ahora</button><button class="compare-close" id="compare-close" type="button" aria-label="Vaciar comparación">×</button></div>
     <div class="modal-backdrop" id="modal" hidden></div><div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script type="module" src="/app.js"></script>
+    <script type="module" src="/assistant-widget.js"></script>
   </body>
 </html>
