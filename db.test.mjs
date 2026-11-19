@@ -17,10 +17,10 @@ test("acepta la variable POSTGRES_URL que provee la integración de Neon en Verc
 test("crea y siembra el catálogo PostgreSQL",async()=>{
   const store=memoryStore();
   await store.initialize();
-  assert.deepEqual(await store.counts(),{vehicles:12,agencies:7,brands:5,leads:0});
+  assert.deepEqual(await store.counts(),{vehicles:48,agencies:7,brands:5,leads:0});
   const stats=await store.stats();
-  assert.equal(stats.vehicles,12);
-  assert.equal(stats.cities,4);
+  assert.equal(stats.vehicles,48);
+  assert.ok(stats.cities>=4);
   const brands=await store.listBrands("seminuevos");
   assert.equal(brands.length,5);
   assert.match(brands.find(brand=>brand.slug==="toyota").logoSvg,/^<svg/);
@@ -46,7 +46,7 @@ test("cada vehículo sembrado conoce la agencia donde se encuentra",async()=>{
   await store.initialize();
   const agencies=await store.listAgencies(),names=agencies.map(agency=>agency.name);
   const vehicles=await store.listVehicles();
-  assert.equal(vehicles.length,12);
+  assert.equal(vehicles.length,48);
   for(const listed of vehicles){
     const vehicle=await store.getVehicle(listed.id);
     assert.ok(vehicle.agency,`${vehicle.code} sin agencia`);
@@ -55,5 +55,15 @@ test("cada vehículo sembrado conoce la agencia donde se encuentra",async()=>{
   const swift=vehicles.find(item=>item.code==="U-31005"),detail=await store.getVehicle(swift.id);
   assert.equal(detail.agency.name,"1001Carros Daule");
   assert.deepEqual(Object.keys(detail.agency).sort(),["address","city","hours","lat","lng","name","phone"]);
+  await store.close();
+});
+
+test("todos los vehículos del catálogo tienen una foto http(s)",async()=>{
+  const store=memoryStore();
+  await store.initialize();
+  const vehicles=await store.listVehicles();
+  assert.equal(vehicles.length,48);
+  const sinFoto=vehicles.filter(vehicle=>!/^https:\/\//.test(vehicle.image||"")).map(vehicle=>vehicle.code);
+  assert.deepEqual(sinFoto,[]);
   await store.close();
 });

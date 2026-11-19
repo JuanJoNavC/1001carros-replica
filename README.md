@@ -31,7 +31,7 @@ npm run dev
 
 Abre `http://127.0.0.1:4173`.
 
-La primera conexión crea las tablas e inyecta automáticamente el catálogo, las marcas y las agencias. `DATABASE_URL` es obligatoria; `PG_POOL_MAX` controla el máximo de conexiones por proceso.
+La primera conexión crea las tablas e inyecta automáticamente el catálogo, las marcas y las agencias. En desarrollo, `npm run dev` y `npm start` cargan automáticamente el archivo local `.env`; `DATABASE_URL` sigue siendo obligatoria y `PG_POOL_MAX` controla el máximo de conexiones por proceso.
 
 ## Rutas
 
