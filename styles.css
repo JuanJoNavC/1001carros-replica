@@ -1320,3 +1320,51 @@ html { scroll-padding-top: 90px; }
 .docs-sign { min-height:50px; }
 .docs-done a.secondary-button { padding:14px 18px; text-decoration:none; }
 @media (max-width:640px) { .docs-summary { grid-template-columns:1fr; } .docs-card { padding:18px; } .docs-btn, .docs-actions > * { flex:1 1 100%; } }
+
+/* Reserva en línea con pago (PayPhone) */
+.reserve-pay-card { margin-bottom:10px; padding:22px 25px; border:2px solid #0a3b91; border-radius:7px; background:#f4f8ff; }
+.reserve-pay-card h2 { margin:0 0 8px; color:#0a3b91; font-size:18px; }
+.reserve-pay-card p { margin:0 0 15px; color:#33415c; font-size:13px; line-height:1.5; }
+.reserve-pay-button { min-height:48px; display:flex; align-items:center; justify-content:center; gap:10px; border-radius:7px; background:#ffd400; color:#0a3b91; font-size:14px; font-weight:800; text-decoration:none; box-shadow:0 7px 16px rgba(186,145,0,.22); }
+.reserve-pay-button:hover { background:#ffdf33; }
+.reserve-pay-card small { display:block; margin-top:10px; color:#60708d; font-size:11px; text-align:center; }
+.reserve-pay-card.is-reserved { border-color:#c7cfdb; background:#f6f7f9; }
+.reserve-pay-card.is-reserved h2 { color:#4a5568; }
+.reserve-pay-secondary { color:#0a3b91; font-size:13px; font-weight:800; }
+a.sticky-reserve { padding:0 18px; text-decoration:none; }
+.sticky-reserved { padding:10px 16px; border-radius:7px; background:#e9edf3; color:#4a5568; font-size:12px; font-weight:800; }
+.pay-summary-deposit { color:#0a3b91 !important; }
+.pay-form { display:grid; gap:15px; margin-top:22px; }
+.pay-form label { display:grid; gap:6px; color:#17325d; font-size:13px; font-weight:700; }
+.pay-form label small { color:#7b879c; font-weight:600; }
+.pay-form input:not([type=checkbox]) { min-height:44px; padding:0 14px; border:1px solid #b8c3d3; border-radius:10px; color:#0b1d40; font-size:14px; }
+.pay-form input:focus { outline:2px solid #0867f4; outline-offset:1px; }
+.pay-form .pay-terms { grid-template-columns:20px 1fr; align-items:start; gap:10px; color:#4a5874; font-weight:500; line-height:1.5; }
+.pay-form .pay-terms input { width:18px; height:18px; margin-top:2px; }
+.pay-error { min-height:18px; margin:0; color:#c62828; font-size:13px; font-weight:700; }
+.pay-box { margin-top:22px; padding:22px; border:1px solid #cdd5e1; border-radius:16px; background:#fff; }
+.pay-box small { display:block; margin-top:12px; color:#7b879c; font-size:11px; }
+.pay-box-status { margin:8px 0 0; color:#60708d; font-size:13px; }
+.pay-demo { border-style:dashed; border-color:#e0a800; background:#fffbea; }
+.pay-demo p { color:#4a3b00; font-size:13px; line-height:1.55; }
+.pay-demo-badge { display:inline-block; padding:4px 10px; border-radius:999px; background:#ffd400; color:#0a3b91; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+.pay-demo-actions { display:flex; flex-wrap:wrap; gap:10px; }
+.pay-result { min-height:calc(100vh - 69px); display:grid; place-items:start center; padding:56px 20px 80px; background:#f6f8fb; }
+.pay-result-card { width:min(620px,100%); padding:38px clamp(22px,5vw,46px); border:1px solid #dfe2e8; border-radius:18px; background:#fff; color:#0a2148; box-shadow:0 14px 34px rgba(10,59,145,.08); }
+.pay-result-card h1 { margin:6px 0 18px; font-size:28px; line-height:1.2; letter-spacing:-.03em; }
+.pay-result-card h2 { margin:24px 0 6px; font-size:17px; }
+.pay-result-card p { color:#4a5874; font-size:14px; line-height:1.6; }
+.pay-result-icon { width:52px; height:52px; display:grid; place-items:center; border-radius:50%; background:#1fa463; color:#fff; font-size:26px; font-weight:800; }
+.pay-result-card.is-error .pay-result-icon { background:#c62828; }
+.pay-result-car { display:grid; grid-template-columns:110px 1fr; gap:14px; align-items:center; padding:12px; border-radius:12px; background:#f4f8ff; }
+.pay-result-car img { width:110px; height:80px; object-fit:cover; border-radius:10px; }
+.pay-result-car strong,.pay-result-car span { display:block; }
+.pay-result-car span { margin-top:4px; color:#60708d; font-size:13px; }
+.pay-result-details { display:grid; gap:10px; margin:20px 0 0; }
+.pay-result-details div { display:flex; justify-content:space-between; gap:16px; padding-bottom:10px; border-bottom:1px solid #eef1f5; font-size:13px; }
+.pay-result-details dt { color:#60708d; }
+.pay-result-details dd { margin:0; color:#0b1d40; font-weight:800; text-align:right; }
+.pay-demo-note { margin-top:14px; padding:10px 12px; border-radius:8px; background:#fffbea; color:#6b5300 !important; font-size:12px !important; }
+.pay-result-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:22px; }
+.pay-result-actions a { text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
+.pay-box + .reservation-actions { margin-top:18px; }

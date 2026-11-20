@@ -78,3 +78,17 @@ npm test
 ```
 
 Las pruebas usan PostgreSQL en memoria mediante `pg-mem`, sin modificar la base configurada en `DATABASE_URL`. Las imágenes del inventario se cargan desde sitios externos y requieren conexión a internet.
+
+## Reserva en línea con PayPhone
+
+Desde la ficha de cada vehículo el cliente puede **reservarlo por USD 200** (`/reserva/:id`): elige agencia, deja sus datos y paga con la Cajita de Pagos de PayPhone. El resultado se muestra en `/reserva/confirmacion`.
+
+- El servidor fija el monto (20000 centavos) y confirma cada pago con PayPhone (`/api/confirm`) antes de marcar el carro como reservado. PayPhone revierte el cobro si no se confirma en 5 minutos.
+- Las reservas se guardan en la tabla `reservations` (estados: `pending`, `paid`, `canceled`, `failed`, `paid_conflict`). Un carro reservado sigue en el catálogo con la etiqueta "Reservado" y no se puede volver a reservar.
+- **Sin credenciales funciona en modo demostración**: el pago se simula y la página lo indica. Nunca se simula un pago cuando hay un token configurado.
+
+Para activar los pagos reales o de prueba de PayPhone:
+
+1. En Payphone Developer, crea una aplicación de tipo **WEB** con el dominio del sitio (por ejemplo `1001carros-prueba.vercel.app`) y como URL de respuesta `https://<dominio>/reserva/confirmacion`.
+2. En Vercel → Settings → Environment Variables agrega `PAYPHONE_TOKEN` y `PAYPHONE_STORE_ID` y vuelve a desplegar.
+3. Usa primero el **modo de prueba** de PayPhone (todas las transacciones se aprueban sin cobro real) antes de pasar a producción.
