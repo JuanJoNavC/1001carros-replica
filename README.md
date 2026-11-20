@@ -122,3 +122,12 @@ Después de reservar (o desde la precalificación), el cliente completa su exped
 **Panel del asesor** (`/asesor`): requiere la variable `ASESOR_KEY`. Muestra los expedientes (primero los que esperan revisión), los documentos subidos y permite aprobar o corregir los datos, o pedir que el cliente vuelva a subir un documento.
 
 **Cédulas de prueba del Registro Civil simulado:** `1700000019` María José Pérez López, `1700000027` Carlos Andrés Mora Vera, `1700000035` Ana Lucía Torres Ruiz, `1700000043` Jorge Luis Cevallos Paz, `1700000050` Daniela Fernanda Ríos Vega. Para cualquier otra cédula válida, el registro simulado acepta el nombre escrito.
+
+## Asesor virtual con IA (agente)
+
+El chat del sitio usa un agente de IA (Claude, de Anthropic) cuando existe la variable `ANTHROPIC_API_KEY`; sin ella, sigue funcionando el asistente por reglas.
+
+- **Instrucciones y conocimiento** (editables en español): `asistente/instrucciones.md` y `asistente/conocimiento.md`.
+- **Herramientas del agente** (`agent.mjs`): buscar carros, ver un carro, calcular cuota, listar agencias, cotizar el carro del cliente, estado del trámite, y botones para precalificarse, reservar, agendar test drive, subir documentos o hablar con un asesor por WhatsApp.
+- **Límites en el código:** el agente no paga, no firma ni acepta la autorización del buró; solo abre las pantallas seguras. Las cédulas y números de tarjeta se ocultan antes de enviar el mensaje al modelo. Máximo 20 mensajes por minuto por visitante y 40 por conversación.
+- **Modelo:** `claude-haiku-5-5` por defecto (configurable con `ASISTENTE_MODEL`).

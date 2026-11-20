@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { getStore, hashPassword, verifyPassword } from "./db.mjs";
 import { CONSENT_VERSION, reportExpiresAt, bureauSettings, queryBureau, decideCredit, validatePrequalInput, publicReport, hashCedula, maskCedula, newFolio } from "./bureau.mjs";
 import { newApplicationToken, validateApplicant, validateUpload, lookupRegistry, registrySettings, namesMatch, normalizeName, requiredKinds, buildContract, publicApplication } from "./applications.mjs";
+import { agentSettings, runAgent, sanitizeContext, MAX_TURNS_PER_CONVERSATION } from "./agent.mjs";
 import { RESERVATION_AMOUNT_CENTS, PAYPHONE_BOX_CSS, PAYPHONE_BOX_JS, paymentSettings, newClientTransactionId, validateReservationInput, buildPaymentBox, confirmWithPayphone, publicReservation, simulateCharge, simulatedAuthorizationCode, simulatedConfirmBody, interpretConfirmation, APPROVED, HOLD_HOURS, MAX_RESERVATIONS_PER_DAY, MAX_SIM_CHARGES, OTP_TTL_MINUTES, OTP_MAX_ATTEMPTS, OTP_RESEND_SECONDS, OTP_MAX_SENDS, normalizePhone, maskPhone, newOtpCode, hashOtp, isValidDocument, messagingSettings } from "./payments.mjs";
 
 const json=(res,status,value)=>{res.statusCode=status;res.setHeader("content-type","application/json; charset=utf-8");res.setHeader("cache-control","no-store");res.end(JSON.stringify(value));};
@@ -9,7 +10,7 @@ const readBody=async req=>{if(req.body&&typeof req.body==="object")return req.bo
 const bearer=req=>(req.headers.authorization||"").replace(/^Bearer\s+/i,"");
 
 export async function handleApi(req,res,url=new URL(req.url,`http://${req.headers.host||"localhost"}`),store=getStore(),deps={}){
-  const settings=deps.settings||paymentSettings(),fetchImpl=deps.fetchImpl||fetch,now=deps.now||(()=>new Date()),messaging=deps.messaging||messagingSettings(),bureau=deps.bureau||bureauSettings(),registry=deps.registry||registrySettings(),asesorKey=deps.asesorKey!==undefined?deps.asesorKey:(process.env.ASESOR_KEY||"");
+  const settings=deps.settings||paymentSettings(),fetchImpl=deps.fetchImpl||fetch,now=deps.now||(()=>new Date()),messaging=deps.messaging||messagingSettings(),bureau=deps.bureau||bureauSettings(),registry=deps.registry||registrySettings(),asesorKey=deps.asesorKey!==undefined?deps.asesorKey:(process.env.ASESOR_KEY||""),agent=deps.agent||agentSettings();
   try{
     const path=url.pathname;
     if(req.method==="GET"&&path==="/api/vehicles"){await store.releaseExpired(now());}if(req.method==="GET"&&path==="/api/vehicles")return json(res,200,{items:await store.listVehicles(Object.fromEntries(url.searchParams))});
@@ -22,6 +23,8 @@ export async function handleApi(req,res,url=new URL(req.url,`http://${req.header
     if(req.method==="POST"&&path==="/api/auth/login"){const data=await readBody(req),row=await store.findUserByEmail(String(data.email||"").toLowerCase());if(!row||!verifyPassword(data.password||"",row.password_hash))return json(res,401,{error:"Correo o contraseña incorrectos"});const user={id:row.id,name:row.name,email:row.email},token=randomBytes(24).toString("hex");await store.createSession(user.id,token);return json(res,200,{token,user});}
     if(path==="/api/favorites"&&req.method==="GET"){const user=await store.sessionUser(bearer(req));if(!user)return json(res,401,{error:"Inicia sesión"});return json(res,200,{items:await store.listFavorites(user.id)});}
     if(/^\/api\/favorites\/\d+$/.test(path)&&["POST","DELETE"].includes(req.method)){const user=await store.sessionUser(bearer(req));if(!user)return json(res,401,{error:"Inicia sesión"});const vehicleId=Number(path.split("/").pop());if(req.method==="POST")await store.saveFavorite(user.id,vehicleId);else await store.deleteFavorite(user.id,vehicleId);return json(res,req.method==="POST"?201:200,{saved:req.method==="POST"});}
+    if(path==="/api/assistant/status"&&req.method==="GET")return json(res,200,{ai:agent.enabled});
+    if(path==="/api/assistant/chat"&&req.method==="POST")return await assistantChatRoute(req,res,store,agent,deps.fetchImpl||fetch,now);
     if(path==="/api/applications"&&req.method==="POST")return await createApplicationRoute(req,res,store);
     if(path.startsWith("/api/applications/"))return await applicationRoutes(req,res,store,path,registry,now);
     if(path.startsWith("/api/asesor/"))return await asesorRoutes(req,res,store,path,asesorKey);
@@ -300,4 +303,18 @@ async function asesorRoutes(req,res,store,path,asesorKey){
       return json(res,200,{item:publicApplication(updated,await store.listApplicationFiles(app.id))});}
     return json(res,400,{error:"Acción no válida"});}
   return json(res,404,{error:"Ruta de API no encontrada"});
+}
+
+// ---------------- Asesor virtual con IA ----------------
+const chatHits=new Map();
+function rateLimited(req,now){const ip=String(req.headers["x-forwarded-for"]||req.socket?.remoteAddress||"local").split(",")[0].trim(),minute=Math.floor(now.getTime()/60000),key=`${ip}:${minute}`,count=(chatHits.get(key)||0)+1;chatHits.set(key,count);if(chatHits.size>5000)chatHits.clear();return count>20;}
+async function assistantChatRoute(req,res,store,agent,fetchImpl,now){
+  if(!agent.enabled)return json(res,503,{error:"El asistente con IA no está activado.",code:"ai_disabled"});
+  const current=now();
+  if(rateLimited(req,current))return json(res,429,{error:"Estás escribiendo muy rápido. Espera un momento e inténtalo de nuevo."});
+  const data=await readBody(req),messages=Array.isArray(data.messages)?data.messages:[];
+  if(messages.filter(message=>message?.role==="user").length>MAX_TURNS_PER_CONVERSATION)return json(res,429,{error:"Esta conversación es muy larga. Te recomiendo hablar con un asesor por WhatsApp.",code:"too_long"});
+  try{const reply=await runAgent({messages,context:sanitizeContext(data.context||{}),store,settings:agent,fetchImpl,now:current});
+    return json(res,200,{text:reply.text,cars:reply.cars,actions:reply.actions});}
+  catch(error){console.error("Assistant error",error);return json(res,502,{error:"No pude responder en este momento. Inténtalo de nuevo o habla con un asesor.",code:"ai_error"});}
 }
