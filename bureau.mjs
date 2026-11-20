@@ -13,11 +13,18 @@ export const CONSENT_TEXT = "Autorizo expresamente a 1001Carros.com y a sus enti
 export const MAX_DEBT_RATIO = 0.40;          // deudas totales / ingreso (recomendación de endeudamiento responsable)
 export const MAX_RATE = 0.1677;              // tasa efectiva máxima del segmento consumo (BCE)
 export const TERMS = [36, 48, 60, 72];
-export const REUSE_HOURS = 24;               // una misma cédula no se vuelve a consultar dentro de 24 h
+// Cada consulta al buró le cuesta a la empresa: una persona se consulta UNA vez y el reporte se
+// reutiliza para precalificarla en otros carros mientras esté vigente (BURO_REPORT_DAYS, 30 por defecto).
+export const DEFAULT_REPORT_DAYS = 30;
+export function reportValidDays(env = process.env) {
+  const days = Number(env.BURO_REPORT_DAYS);
+  return Number.isInteger(days) && days > 0 && days <= 180 ? days : DEFAULT_REPORT_DAYS;
+}
+export const reportExpiresAt = (consultedAt, days = reportValidDays()) => new Date(new Date(consultedAt).getTime() + days * 86400000);
 export const MAX_DOWN_PCT = 0.5;
 
 export function bureauSettings(env = process.env) {
-  return { provider: env.BURO_PROVIDER ? String(env.BURO_PROVIDER) : "simulado" };
+  return { provider: env.BURO_PROVIDER ? String(env.BURO_PROVIDER) : "simulado", reportDays: reportValidDays(env) };
 }
 
 // Cédulas de prueba con perfiles fijos para demostrar cada resultado.

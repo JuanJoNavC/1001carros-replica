@@ -54,22 +54,48 @@ test("exige autorización expresa y datos válidos",()=>{
   assert.match(validatePrequalInput({cedula:"1700000019",income:20,consent:true}).error,/ingreso/);
 });
 
-test("la API registra la consulta con folio y reutiliza el reporte dentro de 24 h",async()=>{
+test("una consulta al buró por persona: el reporte se reutiliza 30 días y luego vence",async()=>{
   const store=makeStore();
-  let clock=new Date("2026-11-20T15:00:00Z");const deps={now:()=>clock};
+  let clock=new Date("2026-11-20T15:00:00Z");const deps={now:()=>clock,bureau:{provider:"simulado",reportDays:30}};
   const first=await call(store,"POST","/api/prequalification",{vehicleId:1,cedula:"1700000019",income:2500,consent:true},deps);
   assert.equal(first.status,201);
   assert.match(first.body.folio,/^BUR-20261120-/);
   assert.equal(first.body.report.score,912);
   assert.equal(first.body.cedulaMasked,"170*****19");
   assert.equal(first.body.reused,false);
+  assert.equal(first.body.reportExpiresAt,"2026-12-20T15:00:00.000Z");
   assert.equal(first.body.decision.status,"preapproved");
-  const second=await call(store,"POST","/api/prequalification",{vehicleId:2,cedula:"1700000019",income:2500,consent:true},deps);
-  assert.equal(second.body.reused,true);
-  clock=new Date("2026-11-21T16:00:00Z");
-  const third=await call(store,"POST","/api/prequalification",{vehicleId:2,cedula:"1700000019",income:2500,consent:true},deps);
-  assert.equal(third.body.reused,false);
+  // Otro carro, 10 días después: se reutiliza el reporte sin pedir la cédula ni consultar el buró.
+  clock=new Date("2026-11-30T15:00:00Z");
+  const other=await call(store,"POST","/api/prequalification/reuse",{reportFolio:first.body.folio,vehicleId:2},deps);
+  assert.equal(other.status,201);
+  assert.equal(other.body.reused,true);
+  assert.equal(other.body.reportFolio,first.body.folio);
+  assert.equal(other.body.income,2500);
+  // Reutilizar desde una precalificación reutilizada apunta al reporte original.
+  const chained=await call(store,"POST","/api/prequalification/reuse",{reportFolio:other.body.folio,vehicleId:3,income:3000},deps);
+  assert.equal(chained.body.reportFolio,first.body.folio);
+  assert.equal(chained.body.income,3000);
+  // Si vuelve a escribir su cédula dentro de la vigencia, tampoco se consulta de nuevo.
+  const typedAgain=await call(store,"POST","/api/prequalification",{vehicleId:4,cedula:"1700000019",income:2500,consent:true},deps);
+  assert.equal(typedAgain.body.reused,true);
+  assert.deepEqual(await store.bureauUsage(new Date("2026-11-01T00:00:00Z")),{queries:1,reused:3});
+  // Meses después: el reporte venció; la reutilización se rechaza y una nueva consulta sí va al buró.
+  clock=new Date("2027-02-15T15:00:00Z");
+  const expired=await call(store,"POST","/api/prequalification/reuse",{reportFolio:first.body.folio,vehicleId:2},deps);
+  assert.equal(expired.status,410);
+  assert.equal(expired.body.code,"report_expired");
+  const fresh=await call(store,"POST","/api/prequalification",{vehicleId:2,cedula:"1700000019",income:2500,consent:true},deps);
+  assert.equal(fresh.body.reused,false);
+  assert.equal((await store.bureauUsage(new Date("2026-11-01T00:00:00Z"))).queries,2);
   const noConsent=await call(store,"POST","/api/prequalification",{vehicleId:1,cedula:"1700000019",income:2500},deps);
   assert.equal(noConsent.status,400);
   await store.close();
+});
+
+test("la vigencia del reporte es configurable",async()=>{
+  const { reportValidDays }=await import("./bureau.mjs");
+  assert.equal(reportValidDays({}),30);
+  assert.equal(reportValidDays({BURO_REPORT_DAYS:"60"}),60);
+  assert.equal(reportValidDays({BURO_REPORT_DAYS:"abc"}),30);
 });

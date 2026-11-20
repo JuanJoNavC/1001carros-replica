@@ -153,6 +153,8 @@ export function createStore(pool){
     async setReservationDocument(clientTransactionId,documentId){return (await run("UPDATE reservations SET document_id=$2 WHERE client_tx_id=$1 RETURNING *",[clientTransactionId,documentId])).rows[0];},
     async setReservationVisit(clientTransactionId,visitAt){return (await run("UPDATE reservations SET visit_at=$2 WHERE client_tx_id=$1 RETURNING *",[clientTransactionId,visitAt])).rows[0];},
     async lastBureauInquiry(cedulaHash,since){return (await run("SELECT * FROM bureau_inquiries WHERE cedula_hash=$1 AND reused_from IS NULL AND created_at>=$2 ORDER BY created_at DESC LIMIT 1",[cedulaHash,since])).rows[0]||null;},
+    async getBureauInquiry(folio){return (await run("SELECT * FROM bureau_inquiries WHERE folio=$1",[folio])).rows[0]||null;},
+    async bureauUsage(since){const row=(await run("SELECT COALESCE(SUM(CASE WHEN reused_from IS NULL THEN 1 ELSE 0 END),0)::int queries,COALESCE(SUM(CASE WHEN reused_from IS NOT NULL THEN 1 ELSE 0 END),0)::int reused FROM bureau_inquiries WHERE created_at>=$1",[since])).rows[0];return row;},
     async createBureauInquiry(data){return (await run("INSERT INTO bureau_inquiries (folio,cedula_hash,cedula_masked,vehicle_id,income,provider,consent_version,consent_at,report,decision_status,decision,reused_from,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11::jsonb,$12,$13) RETURNING *",[data.folio,data.cedulaHash,data.cedulaMasked,data.vehicleId,data.income,data.provider,data.consentVersion,data.consentAt,JSON.stringify(data.report),data.decisionStatus,JSON.stringify(data.decision),data.reusedFrom||null,data.createdAt])).rows[0];},
     async close(){await pool.end();}
   };

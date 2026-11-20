@@ -108,5 +108,5 @@ El buró de crédito no se usa para reservar: queda en la precalificación, con 
 
 - **Buró simulado** (por defecto): devuelve un reporte con la estructura de uno real (score 0–999, deudas vigentes, cuota mensual de deudas, mayor atraso en 24 meses y consultas recientes). Para conectar Equifax o Aval se implementa `queryBureau` y se define `BURO_PROVIDER`.
 - **Motor de decisión:** capacidad de pago = 40% del ingreso − cuota de deudas actuales; tasas por perfil sin superar el techo legal de consumo (16,77%); resultados: precalificado, con más entrada, revisión de un asesor o no precalificado.
-- Una misma cédula no se vuelve a consultar dentro de 24 h (se reutiliza el reporte).
+- **Control del costo:** una persona se consulta en el buró una sola vez; el reporte queda vigente 30 días (`BURO_REPORT_DAYS`) y se reutiliza para precalificarla en otros carros (`POST /api/prequalification/reuse`), sin pedir la cédula de nuevo. Si escribe su cédula otra vez dentro de la vigencia, tampoco se consulta. Al vencer, la siguiente precalificación hace una consulta nueva. Cada registro indica si fue consulta nueva o reutilizada.
 - **Cédulas de prueba:** `1700000019` excelente, `1700000027` bueno, `1700000035` deudas altas, `1700000043` con mora, `1700000050` sin historial.

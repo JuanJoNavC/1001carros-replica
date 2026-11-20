@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { getStore, hashPassword, verifyPassword } from "./db.mjs";
-import { CONSENT_VERSION, REUSE_HOURS, bureauSettings, queryBureau, decideCredit, validatePrequalInput, publicReport, hashCedula, maskCedula, newFolio } from "./bureau.mjs";
+import { CONSENT_VERSION, reportExpiresAt, bureauSettings, queryBureau, decideCredit, validatePrequalInput, publicReport, hashCedula, maskCedula, newFolio } from "./bureau.mjs";
 import { RESERVATION_AMOUNT_CENTS, PAYPHONE_BOX_CSS, PAYPHONE_BOX_JS, paymentSettings, newClientTransactionId, validateReservationInput, buildPaymentBox, confirmWithPayphone, publicReservation, simulateCharge, simulatedAuthorizationCode, simulatedConfirmBody, interpretConfirmation, APPROVED, HOLD_HOURS, MAX_RESERVATIONS_PER_DAY, MAX_SIM_CHARGES, OTP_TTL_MINUTES, OTP_MAX_ATTEMPTS, OTP_RESEND_SECONDS, OTP_MAX_SENDS, normalizePhone, maskPhone, newOtpCode, hashOtp, isValidDocument, messagingSettings } from "./payments.mjs";
 
 const json=(res,status,value)=>{res.statusCode=status;res.setHeader("content-type","application/json; charset=utf-8");res.setHeader("cache-control","no-store");res.end(JSON.stringify(value));};
@@ -22,6 +22,7 @@ export async function handleApi(req,res,url=new URL(req.url,`http://${req.header
     if(path==="/api/favorites"&&req.method==="GET"){const user=await store.sessionUser(bearer(req));if(!user)return json(res,401,{error:"Inicia sesión"});return json(res,200,{items:await store.listFavorites(user.id)});}
     if(/^\/api\/favorites\/\d+$/.test(path)&&["POST","DELETE"].includes(req.method)){const user=await store.sessionUser(bearer(req));if(!user)return json(res,401,{error:"Inicia sesión"});const vehicleId=Number(path.split("/").pop());if(req.method==="POST")await store.saveFavorite(user.id,vehicleId);else await store.deleteFavorite(user.id,vehicleId);return json(res,req.method==="POST"?201:200,{saved:req.method==="POST"});}
     if(req.method==="POST"&&path==="/api/prequalification")return await prequalificationRoute(req,res,store,bureau,now);
+    if(req.method==="POST"&&path==="/api/prequalification/reuse")return await prequalificationReuseRoute(req,res,store,bureau,now);
     if(req.method==="POST"&&path==="/api/reservations")return await createReservationRoute(req,res,store,settings,now,messaging);
     if(req.method==="POST"&&path==="/api/reservations/verify")return await verifyReservationRoute(req,res,store,settings,now);
     if(req.method==="POST"&&path==="/api/reservations/resend")return await resendCodeRoute(req,res,store,now,messaging);
@@ -153,19 +154,43 @@ async function simulatedChargeRoute(req,res,store,settings){
   return json(res,201,{id:sim.id,clientTransactionId:row.client_tx_id,statusCode:sim.status_code});
 }
 
+// Respuesta común de una precalificación (consulta nueva o reutilizada).
+function prequalPayload(row,original,report,decision,bureau){
+  const consultedAt=new Date(original.created_at);
+  return {folio:row.folio,reportFolio:original.folio,provider:original.provider==="simulado"?"Buró de prueba (simulado)":original.provider,consultedAt:consultedAt.toISOString(),reportExpiresAt:reportExpiresAt(consultedAt,bureau.reportDays).toISOString(),reused:Boolean(row.reused_from),consentVersion:CONSENT_VERSION,cedulaMasked:row.cedula_masked,income:row.income,report:publicReport(report),decision};
+}
+
+async function savePrequalification(store,{original,report,vehicle,income,bureau,current,cedulaHash,cedulaMasked}){
+  const decision=decideCredit({report,income,price:Number(vehicle.price)});
+  const row=await store.createBureauInquiry({folio:newFolio(current),cedulaHash,cedulaMasked,vehicleId:vehicle.id,income,provider:original?original.provider:bureau.provider,consentVersion:CONSENT_VERSION,consentAt:current,report,decisionStatus:decision.status,decision,reusedFrom:original?.folio,createdAt:current});
+  await store.createLead({kind:"prequalification",vehicleId:vehicle.id,message:`Precalificación ${row.folio}${original?` (reutiliza el reporte ${original.folio}, sin costo de buró)`:" (consulta nueva al buró)"}: ${decision.status}, score ${report.score??"sin historial"}, ingreso USD ${income}`});
+  return prequalPayload(row,original||row,report,decision,bureau);
+}
+
 async function prequalificationRoute(req,res,store,bureau,now){
   const input=validatePrequalInput(await readBody(req));
   if(input.error)return json(res,400,{error:input.error});
   const vehicle=await store.getVehicle(input.vehicleId);
   if(!vehicle)return json(res,404,{error:"Vehículo no encontrado"});
   const current=now(),cedulaHash=hashCedula(input.cedula);
-  // Una misma cédula no se vuelve a consultar al buró dentro de 24 h: se reutiliza el reporte (evita costos y consultas repetidas).
-  const previous=await store.lastBureauInquiry(cedulaHash,new Date(current.getTime()-REUSE_HOURS*3600000));
+  // Una persona se consulta una sola vez mientras su reporte esté vigente: se reutiliza (sin costo de buró).
+  const original=await store.lastBureauInquiry(cedulaHash,new Date(current.getTime()-bureau.reportDays*86400000));
   let report;
-  try{report=previous?previous.report:await queryBureau(input.cedula,bureau);}
+  try{report=original?original.report:await queryBureau(input.cedula,bureau);}
   catch(error){console.error("Bureau error",error);return json(res,502,{error:"No pudimos consultar el buró en este momento. Intenta de nuevo en unos minutos."});}
-  const decision=decideCredit({report,income:input.income,price:Number(vehicle.price)});
-  const row=await store.createBureauInquiry({folio:newFolio(current),cedulaHash,cedulaMasked:maskCedula(input.cedula),vehicleId:vehicle.id,income:input.income,provider:previous?previous.provider:bureau.provider,consentVersion:CONSENT_VERSION,consentAt:current,report,decisionStatus:decision.status,decision,reusedFrom:previous?.folio,createdAt:current});
-  await store.createLead({kind:"prequalification",vehicleId:vehicle.id,message:`Precalificación ${row.folio}: ${decision.status} (score ${report.score??"sin historial"}, ingreso USD ${input.income})`});
-  return json(res,201,{folio:row.folio,provider:row.provider==="simulado"?"Buró de prueba (simulado)":row.provider,consultedAt:current.toISOString(),reused:Boolean(previous),consentVersion:CONSENT_VERSION,cedulaMasked:row.cedula_masked,report:publicReport(report),decision});
+  return json(res,201,await savePrequalification(store,{original,report,vehicle,income:input.income,bureau,current,cedulaHash,cedulaMasked:maskCedula(input.cedula)}));
+}
+
+// Precalificar otro carro con el reporte vigente, sin volver a pedir la cédula ni consultar el buró.
+async function prequalificationReuseRoute(req,res,store,bureau,now){
+  const data=await readBody(req),current=now();
+  const found=await store.getBureauInquiry(String(data.reportFolio||"").slice(0,40));
+  const original=found&&found.reused_from?await store.getBureauInquiry(found.reused_from):found;
+  if(!original)return json(res,404,{error:"No encontramos tu precalificación anterior.",code:"report_not_found"});
+  if(reportExpiresAt(original.created_at,bureau.reportDays)<=current)return json(res,410,{error:"Tu reporte del buró venció. Haz una nueva precalificación para ver tu oferta actualizada.",code:"report_expired"});
+  const vehicle=await store.getVehicle(Number(data.vehicleId));
+  if(!vehicle)return json(res,404,{error:"Vehículo no encontrado"});
+  const income=data.income===undefined||data.income===null||data.income===""?original.income:Math.round(Number(data.income));
+  if(!(income>=100&&income<=100000))return json(res,400,{error:"Ingresa tu ingreso mensual en dólares (entre 100 y 100.000)."});
+  return json(res,201,await savePrequalification(store,{original,report:original.report,vehicle,income,bureau,current,cedulaHash:original.cedula_hash,cedulaMasked:original.cedula_masked}));
 }
