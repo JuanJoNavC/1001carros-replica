@@ -4,7 +4,7 @@ import { Readable } from "node:stream";
 import { newDb } from "pg-mem";
 import { createStore } from "./db.mjs";
 import { handleApi } from "./http-api.mjs";
-import { validateReservationInput, toPayphonePhone, buildPaymentBox, interpretConfirmation, paymentSettings, newClientTransactionId, RESERVATION_AMOUNT_CENTS, PAYPHONE_CONFIRM_URL } from "./payments.mjs";
+import { simulateCharge, validateReservationInput, toPayphonePhone, buildPaymentBox, interpretConfirmation, paymentSettings, newClientTransactionId, RESERVATION_AMOUNT_CENTS, PAYPHONE_CONFIRM_URL } from "./payments.mjs";
 
 const makeStore=()=>{const memory=newDb(),adapter=memory.adapters.createPg();return createStore(new adapter.Pool());};
 async function call(store,method,path,body,deps){const req=Readable.from(body?[JSON.stringify(body)]:[]);req.method=method;req.url=path;req.headers={host:"localhost","content-type":"application/json"};let output="";const res={statusCode:200,setHeader(){},end(value=""){output+=value;}};await handleApi(req,res,new URL(path,"http://localhost"),store,deps);return {status:res.statusCode,body:JSON.parse(output)};}
@@ -51,8 +51,15 @@ test("reserva en modo demostración: el carro queda reservado y no se puede rese
   assert.equal(created.body.item.amount,200);
   assert.equal(created.body.payphone,undefined);
   const tx=created.body.item.clientTransactionId;
-  const confirmed=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx},DEMO);
+  const noTx=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx},DEMO);
+  assert.equal(noTx.status,400);
+  const charge=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:tx,method:"card",cardNumber:"4111 1111 1111 1111"},DEMO);
+  assert.equal(charge.status,201);
+  const confirmed=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx,id:charge.body.id},DEMO);
   assert.equal(confirmed.body.item.status,"paid");
+  assert.equal(confirmed.body.item.cardBrand,"Visa");
+  assert.equal(confirmed.body.item.lastDigits,"1111");
+  assert.ok(confirmed.body.item.authorizationCode);
   assert.equal((await store.getVehicle(1)).status,"reserved");
   const catalog=await call(store,"GET","/api/vehicles",null,DEMO);
   assert.equal(catalog.body.items.find(car=>car.id===1).badge,"Reservado");
@@ -107,5 +114,38 @@ test("una reserva iniciada con PayPhone no se puede marcar pagada como demostrac
   const attempt=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:created.body.item.clientTransactionId},DEMO);
   assert.equal(attempt.status,503);
   assert.equal((await store.getVehicle(4)).status,"available");
+  await store.close();
+});
+
+test("la pasarela simulada solo acepta tarjetas de prueba",()=>{
+  assert.equal(simulateCharge({method:"card",cardNumber:"4111111111111111"}).statusCode,3);
+  assert.equal(simulateCharge({method:"card",cardNumber:"4000 0000 0000 0002"}).statusCode,2);
+  assert.match(simulateCharge({method:"card",cardNumber:"4532015112830366"}).error,/tarjetas de prueba/);
+  assert.equal(simulateCharge({method:"payphone",approve:false}).statusCode,2);
+});
+
+test("simulación: tarjeta rechazada deja el carro disponible y se puede reintentar",async()=>{
+  const store=makeStore();
+  const created=await call(store,"POST","/api/reservations",{vehicleId:5,...customer},DEMO),tx=created.body.item.clientTransactionId;
+  const fake=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:tx,method:"card",cardNumber:"4532015112830366"},DEMO);
+  assert.equal(fake.status,400);
+  const charge=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:tx,method:"card",cardNumber:"4000000000000002"},DEMO);
+  const result=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx,id:charge.body.id},DEMO);
+  assert.equal(result.body.item.status,"canceled");
+  assert.match(result.body.reason,/fondos insuficientes/);
+  assert.equal((await store.getVehicle(5)).status,"available");
+  const retry=await call(store,"POST","/api/reservations",{vehicleId:5,...customer},DEMO);
+  const balance=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:retry.body.item.clientTransactionId,method:"payphone",approve:true},DEMO);
+  const ok=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:retry.body.item.clientTransactionId,id:balance.body.id},DEMO);
+  assert.equal(ok.body.item.status,"paid");
+  assert.equal(ok.body.item.cardBrand,"Saldo PayPhone");
+  await store.close();
+});
+
+test("la pasarela simulada no existe cuando PayPhone real está configurado",async()=>{
+  const store=makeStore(),settings={mode:"payphone",token:"tok",storeId:""};
+  const created=await call(store,"POST","/api/reservations",{vehicleId:6,...customer},{settings});
+  const charge=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:created.body.item.clientTransactionId,method:"card",cardNumber:"4111111111111111"},{settings});
+  assert.equal(charge.status,404);
   await store.close();
 });

@@ -85,7 +85,8 @@ Desde la ficha de cada vehículo el cliente puede **reservarlo por USD 200** (`/
 
 - El servidor fija el monto (20000 centavos) y confirma cada pago con PayPhone (`/api/confirm`) antes de marcar el carro como reservado. PayPhone revierte el cobro si no se confirma en 5 minutos.
 - Las reservas se guardan en la tabla `reservations` (estados: `pending`, `paid`, `canceled`, `failed`, `paid_conflict`). Un carro reservado sigue en el catálogo con la etiqueta "Reservado" y no se puede volver a reservar.
-- **Sin credenciales funciona en modo demostración**: el pago se simula y la página lo indica. Nunca se simula un pago cuando hay un token configurado.
+- **Sin credenciales funciona en modo demostración** con una pasarela simulada que imita a PayPhone (tarjeta o saldo PayPhone, procesamiento, aprobación o rechazo, vencimiento de 10 minutos). Genera una transacción, redirige a `/reserva/confirmacion?id=...&clientTransactionId=...` y el servidor la confirma por el mismo camino que un pago real. Nunca se simula un pago cuando hay un token configurado.
+- La simulación solo acepta tarjetas de prueba (cualquier otro número se rechaza sin enviarse): `4111 1111 1111 1111` y `5555 5555 5555 4444` se aprueban; `4000 0000 0000 0002` (fondos insuficientes) y `5105 1051 0510 5100` (rechazada por el banco) se rechazan.
 
 Para activar los pagos reales o de prueba de PayPhone:
 

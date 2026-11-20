@@ -86,6 +86,7 @@ const schemaSql=`
   CREATE INDEX IF NOT EXISTS vehicles_catalog_idx ON vehicles(status,condition,category,brand);
   CREATE TABLE IF NOT EXISTS reservations (id SERIAL PRIMARY KEY,client_tx_id TEXT UNIQUE NOT NULL,vehicle_id INTEGER NOT NULL REFERENCES vehicles(id),agency_id INTEGER REFERENCES agencies(id),name TEXT NOT NULL,email TEXT NOT NULL,phone TEXT NOT NULL,document_id TEXT,amount_cents INTEGER NOT NULL,mode TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',payphone_id BIGINT,authorization_code TEXT,card_brand TEXT,last_digits TEXT,failure_reason TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TIMESTAMPTZ);
   CREATE INDEX IF NOT EXISTS reservations_vehicle_idx ON reservations(vehicle_id,status);
+  CREATE TABLE IF NOT EXISTS sim_payments (id SERIAL PRIMARY KEY,client_tx_id TEXT NOT NULL REFERENCES reservations(client_tx_id),method TEXT NOT NULL,status_code INTEGER NOT NULL,amount_cents INTEGER NOT NULL,card_brand TEXT,last_digits TEXT,authorization_code TEXT,message TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
 `;
 
 const seedVersion="2026-11-18-public-catalog-photos-1";
@@ -129,6 +130,8 @@ export function createStore(pool){
     async getReservation(clientTransactionId){return (await run("SELECT * FROM reservations WHERE client_tx_id=$1",[clientTransactionId])).rows[0]||null;},
     async markReservationPaid(clientTransactionId,payment){const row=(await run("UPDATE reservations SET status='paid',paid_at=CURRENT_TIMESTAMP,payphone_id=$2,authorization_code=$3,card_brand=$4,last_digits=$5,failure_reason=NULL WHERE client_tx_id=$1 AND status IN ('pending','failed') RETURNING *",[clientTransactionId,payment.payphoneId??null,payment.authorizationCode??null,payment.cardBrand??null,payment.lastDigits??null])).rows[0];if(!row)return this.getReservation(clientTransactionId);const reserved=(await run("UPDATE vehicles SET status='reserved' WHERE id=$1 AND status='available' RETURNING id",[row.vehicle_id])).rows[0];if(!reserved)return (await run("UPDATE reservations SET status='paid_conflict',failure_reason='El vehículo ya estaba reservado; requiere reverso del pago' WHERE client_tx_id=$1 RETURNING *",[clientTransactionId])).rows[0];return row;},
     async markReservationFailed(clientTransactionId,status,reason){return (await run("UPDATE reservations SET status=$2,failure_reason=$3 WHERE client_tx_id=$1 AND status='pending' RETURNING *",[clientTransactionId,status,String(reason||"").slice(0,300)])).rows[0]||this.getReservation(clientTransactionId);},
+    async createSimPayment(data){return (await run("INSERT INTO sim_payments (client_tx_id,method,status_code,amount_cents,card_brand,last_digits,authorization_code,message) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",[data.clientTransactionId,data.method,data.statusCode,data.amountCents,data.cardBrand||null,data.lastDigits||null,data.authorizationCode||null,data.message||null])).rows[0];},
+    async getSimPayment(id){return (await run("SELECT * FROM sim_payments WHERE id=$1",[id])).rows[0]||null;},
     async close(){await pool.end();}
   };
 }

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { getStore, hashPassword, verifyPassword } from "./db.mjs";
-import { RESERVATION_AMOUNT_CENTS, PAYPHONE_BOX_CSS, PAYPHONE_BOX_JS, paymentSettings, newClientTransactionId, validateReservationInput, buildPaymentBox, confirmWithPayphone, publicReservation } from "./payments.mjs";
+import { RESERVATION_AMOUNT_CENTS, PAYPHONE_BOX_CSS, PAYPHONE_BOX_JS, paymentSettings, newClientTransactionId, validateReservationInput, buildPaymentBox, confirmWithPayphone, publicReservation, simulateCharge, simulatedAuthorizationCode, simulatedConfirmBody, interpretConfirmation, APPROVED } from "./payments.mjs";
 
 const json=(res,status,value)=>{res.statusCode=status;res.setHeader("content-type","application/json; charset=utf-8");res.setHeader("cache-control","no-store");res.end(JSON.stringify(value));};
 const readBody=async req=>{if(req.body&&typeof req.body==="object")return req.body;const chunks=[];for await(const chunk of req)chunks.push(Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk));const text=Buffer.concat(chunks).toString("utf8");return text?JSON.parse(text):{};};
@@ -22,6 +22,7 @@ export async function handleApi(req,res,url=new URL(req.url,`http://${req.header
     if(/^\/api\/favorites\/\d+$/.test(path)&&["POST","DELETE"].includes(req.method)){const user=await store.sessionUser(bearer(req));if(!user)return json(res,401,{error:"Inicia sesión"});const vehicleId=Number(path.split("/").pop());if(req.method==="POST")await store.saveFavorite(user.id,vehicleId);else await store.deleteFavorite(user.id,vehicleId);return json(res,req.method==="POST"?201:200,{saved:req.method==="POST"});}
     if(req.method==="POST"&&path==="/api/reservations")return await createReservationRoute(req,res,store,settings);
     if(req.method==="POST"&&path==="/api/reservations/confirm")return await confirmReservationRoute(req,res,store,settings,fetchImpl);
+    if(req.method==="POST"&&path==="/api/sim-payphone/charge")return await simulatedChargeRoute(req,res,store,settings);
     if(req.method==="GET"&&/^\/api\/reservations\/[A-Za-z0-9-]{1,50}$/.test(path)){const row=await store.getReservation(path.split("/").pop());if(!row)return json(res,404,{error:"Reserva no encontrada"});return json(res,200,{item:publicReservation(row,await store.getVehicle(row.vehicle_id))});}
     return json(res,404,{error:"Ruta de API no encontrada"});
   }catch(error){console.error("API error",error);return json(res,500,{error:"Error interno",detail:process.env.NODE_ENV==="development"?error.message:undefined});}
@@ -53,7 +54,9 @@ async function confirmReservationRoute(req,res,store,settings,fetchImpl){
   if(row.mode==="demo"){
     // Solo se simula si la reserva nació en modo demo Y el servidor sigue sin credenciales.
     if(settings.mode!=="demo")return json(res,409,{error:"Esta reserva debe pagarse con PayPhone"});
-    result=data.demoResult==="canceled"?{status:"canceled",reason:"Pago de demostración cancelado"}:{status:"paid",payment:{}};
+    const sim=Number.isInteger(Number(data.id))&&Number(data.id)>0?await store.getSimPayment(Number(data.id)):null;
+    if(!sim||sim.client_tx_id!==row.client_tx_id)return json(res,400,{error:"No encontramos la transacción de esta reserva"});
+    result=interpretConfirmation(simulatedConfirmBody(sim,row),row);
   }else{
     if(settings.mode!=="payphone")return json(res,503,{error:"Los pagos con PayPhone no están configurados en el servidor"});
     const id=Number(data.id);
@@ -67,4 +70,16 @@ async function confirmReservationRoute(req,res,store,settings,fetchImpl){
     await store.createLead({kind:"reservation",name:row.name,email:row.email,phone:row.phone,vehicleId:row.vehicle_id,message:`Reserva ${row.client_tx_id} pagada (USD ${row.amount_cents/100}${row.mode==="demo"?", demostración":""})`});
   }else updated=await store.markReservationFailed(clientTransactionId,result.status==="canceled"?"canceled":"failed",result.reason);
   return json(res,200,{item:publicReservation(updated,await store.getVehicle(row.vehicle_id)),reason:result.reason});
+}
+
+async function simulatedChargeRoute(req,res,store,settings){
+  if(settings.mode!=="demo")return json(res,404,{error:"Ruta de API no encontrada"});
+  const data=await readBody(req),row=await store.getReservation(String(data.clientTransactionId||"").slice(0,50));
+  if(!row)return json(res,404,{error:"Reserva no encontrada"});
+  if(row.status!=="pending")return json(res,409,{error:"Esta reserva ya fue procesada"});
+  const outcome=simulateCharge({method:data.method,cardNumber:data.cardNumber,approve:data.approve});
+  if(outcome.error)return json(res,400,{error:outcome.error});
+  const sim=await store.createSimPayment({clientTransactionId:row.client_tx_id,method:outcome.method,statusCode:outcome.statusCode,amountCents:row.amount_cents,cardBrand:outcome.cardBrand,lastDigits:outcome.lastDigits,authorizationCode:outcome.statusCode===APPROVED?simulatedAuthorizationCode():null,message:outcome.message});
+  // Igual que PayPhone: se devuelve el id de la transacción para redirigir a la URL de respuesta.
+  return json(res,201,{id:sim.id,clientTransactionId:row.client_tx_id,statusCode:sim.status_code});
 }

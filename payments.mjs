@@ -7,8 +7,10 @@
 //   3. La página llama POST /api/reservations/confirm; el servidor confirma con PayPhone
 //      (debe hacerse dentro de 5 minutos o PayPhone revierte el cobro) y marca la reserva como pagada.
 //
-// Si no hay credenciales (PAYPHONE_TOKEN), funciona en "modo demostración": el pago se simula
-// y la página lo indica claramente. Nunca se simula un pago si hay un token configurado.
+// Si no hay credenciales (PAYPHONE_TOKEN), funciona en "modo demostración" con una pasarela simulada
+// que imita a PayPhone: genera una transacción, redirige a /reserva/confirmacion?id=...&clientTransactionId=...
+// y el servidor la confirma por el MISMO camino (interpretConfirmation) que un pago real.
+// La simulación solo acepta tarjetas de prueba y nunca se usa si hay un token configurado.
 
 import { randomBytes } from "node:crypto";
 
@@ -136,5 +138,50 @@ export function publicReservation(row, vehicle = null) {
     lastDigits: row.last_digits,
     authorizationCode: row.authorization_code,
     vehicle: vehicle ? { id: vehicle.id, brand: vehicle.brand, model: vehicle.model, year: vehicle.year, code: vehicle.code, price: Number(vehicle.price), image: vehicle.image ?? "" } : null
+  };
+}
+
+// ---- Pasarela simulada (modo demostración) ----
+// Tarjetas de prueba: solo estas se aceptan; cualquier otro número se rechaza sin guardarse.
+export const TEST_CARDS = {
+  "4111111111111111": { brand: "Visa", statusCode: APPROVED, label: "Visa · pago aprobado" },
+  "5555555555554444": { brand: "Mastercard", statusCode: APPROVED, label: "Mastercard · pago aprobado" },
+  "4000000000000002": { brand: "Visa", statusCode: CANCELED, message: "Transacción rechazada: fondos insuficientes", label: "Visa · fondos insuficientes" },
+  "5105105105105100": { brand: "Mastercard", statusCode: CANCELED, message: "Transacción rechazada por el banco emisor", label: "Mastercard · rechazada por el banco" }
+};
+
+// Devuelve el resultado simulado o { error } si los datos no son de prueba.
+export function simulateCharge({ method, cardNumber, approve }) {
+  if (method === "card") {
+    const digits = String(cardNumber || "").replace(/\D/g, "");
+    const card = TEST_CARDS[digits];
+    if (!card) return { error: "En la simulación solo se aceptan las tarjetas de prueba." };
+    return { method, statusCode: card.statusCode, cardBrand: card.brand, lastDigits: digits.slice(-4), message: card.message || "Transacción aprobada" };
+  }
+  if (method === "payphone") {
+    return approve === false
+      ? { method, statusCode: CANCELED, cardBrand: "Saldo PayPhone", lastDigits: null, message: "Pago rechazado desde la app" }
+      : { method, statusCode: APPROVED, cardBrand: "Saldo PayPhone", lastDigits: null, message: "Transacción aprobada" };
+  }
+  return { error: "Método de pago no válido" };
+}
+
+export function simulatedAuthorizationCode() {
+  return randomBytes(3).toString("hex").toUpperCase();
+}
+
+// Respuesta con la misma forma que /api/confirm de PayPhone, a partir de una transacción simulada.
+export function simulatedConfirmBody(sim, reservation) {
+  return {
+    statusCode: Number(sim.status_code),
+    transactionStatus: Number(sim.status_code) === APPROVED ? "Approved" : "Canceled",
+    transactionId: Number(sim.id),
+    clientTransactionId: reservation.client_tx_id,
+    amount: Number(sim.amount_cents),
+    currency: CURRENCY,
+    authorizationCode: sim.authorization_code,
+    cardBrand: sim.card_brand,
+    lastDigits: sim.last_digits,
+    message: sim.message
   };
 }
