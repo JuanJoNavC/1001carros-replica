@@ -1452,3 +1452,26 @@ a.sticky-reserve { padding:0 18px; text-decoration:none; }
 .loan-rows dd { margin:0; color:#17325d; font-weight:800; }
 .loan-note { display:block; margin:8px 0 10px; color:#7b879c; font-size:10px; line-height:1.4; }
 .calculator .loan-rows div { font-size:13px; }
+
+/* Precalificación con buró */
+.prequal-badge.warn { background:#fff4d6; color:#8a5a00; }
+.prequal-badge.info { background:#e5f0ff; color:#0a3b91; }
+.prequal-badge.muted { background:#eef1f5; color:#4a5568; }
+.prequal-message { margin:6px 0 14px; color:#4a5874; font-size:14px; line-height:1.55; }
+.prequal-report { margin-top:16px; padding:12px 14px; border:1px solid #dfe5ee; border-radius:12px; background:#f8fafd; }
+.prequal-report summary { color:#0a3b91; font-size:13px; font-weight:800; cursor:pointer; }
+.prequal-report dl { display:grid; gap:7px; margin:12px 0 8px; }
+.prequal-report dl div { display:flex; justify-content:space-between; gap:12px; font-size:13px; }
+.prequal-report dt { color:#60708d; }
+.prequal-report dd { margin:0; color:#0b1d40; font-weight:800; text-align:right; }
+.prequal-report small { display:block; color:#7b879c; font-size:11px; line-height:1.5; }
+.score-band { margin-left:6px; padding:2px 8px; border-radius:999px; font-size:11px; }
+.band-excelente { background:#e3f7ea; color:#15803d; } .band-bueno { background:#e5f0ff; color:#0a3b91; } .band-regular { background:#fff4d6; color:#8a5a00; } .band-bajo { background:#fde8e8; color:#b42318; } .band-sin-historial { background:#eef1f5; color:#4a5568; }
+.prequal-testids { margin-top:12px; padding:10px 12px; border:1px dashed #b8c3d3; border-radius:10px; background:#f8fafd; }
+.prequal-testids summary { color:#0a3b91; font-size:12px; font-weight:800; cursor:pointer; }
+.prequal-testids p { margin:8px 0; color:#60708d; font-size:12px; }
+.prequal-testids ul { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
+.prequal-testids li button { width:100%; display:flex; justify-content:space-between; gap:10px; padding:7px 10px; border:1px solid #dfe5ee; border-radius:8px; background:#fff; color:#17325d; font-size:12px; cursor:pointer; }
+.prequal-testids li button:hover { border-color:#0867f4; }
+a.prequal-reserve { display:flex; align-items:center; justify-content:center; text-decoration:none; }
+.prequal-offer .prequal-button[data-prequal-budget] { margin-top:4px; }

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { getStore, hashPassword, verifyPassword } from "./db.mjs";
+import { CONSENT_VERSION, REUSE_HOURS, bureauSettings, queryBureau, decideCredit, validatePrequalInput, publicReport, hashCedula, maskCedula, newFolio } from "./bureau.mjs";
 import { RESERVATION_AMOUNT_CENTS, PAYPHONE_BOX_CSS, PAYPHONE_BOX_JS, paymentSettings, newClientTransactionId, validateReservationInput, buildPaymentBox, confirmWithPayphone, publicReservation, simulateCharge, simulatedAuthorizationCode, simulatedConfirmBody, interpretConfirmation, APPROVED, HOLD_HOURS, MAX_RESERVATIONS_PER_DAY, MAX_SIM_CHARGES, OTP_TTL_MINUTES, OTP_MAX_ATTEMPTS, OTP_RESEND_SECONDS, OTP_MAX_SENDS, normalizePhone, maskPhone, newOtpCode, hashOtp, isValidDocument, messagingSettings } from "./payments.mjs";
 
 const json=(res,status,value)=>{res.statusCode=status;res.setHeader("content-type","application/json; charset=utf-8");res.setHeader("cache-control","no-store");res.end(JSON.stringify(value));};
@@ -7,7 +8,7 @@ const readBody=async req=>{if(req.body&&typeof req.body==="object")return req.bo
 const bearer=req=>(req.headers.authorization||"").replace(/^Bearer\s+/i,"");
 
 export async function handleApi(req,res,url=new URL(req.url,`http://${req.headers.host||"localhost"}`),store=getStore(),deps={}){
-  const settings=deps.settings||paymentSettings(),fetchImpl=deps.fetchImpl||fetch,now=deps.now||(()=>new Date()),messaging=deps.messaging||messagingSettings();
+  const settings=deps.settings||paymentSettings(),fetchImpl=deps.fetchImpl||fetch,now=deps.now||(()=>new Date()),messaging=deps.messaging||messagingSettings(),bureau=deps.bureau||bureauSettings();
   try{
     const path=url.pathname;
     if(req.method==="GET"&&path==="/api/vehicles"){await store.releaseExpired(now());}if(req.method==="GET"&&path==="/api/vehicles")return json(res,200,{items:await store.listVehicles(Object.fromEntries(url.searchParams))});
@@ -20,6 +21,7 @@ export async function handleApi(req,res,url=new URL(req.url,`http://${req.header
     if(req.method==="POST"&&path==="/api/auth/login"){const data=await readBody(req),row=await store.findUserByEmail(String(data.email||"").toLowerCase());if(!row||!verifyPassword(data.password||"",row.password_hash))return json(res,401,{error:"Correo o contraseña incorrectos"});const user={id:row.id,name:row.name,email:row.email},token=randomBytes(24).toString("hex");await store.createSession(user.id,token);return json(res,200,{token,user});}
     if(path==="/api/favorites"&&req.method==="GET"){const user=await store.sessionUser(bearer(req));if(!user)return json(res,401,{error:"Inicia sesión"});return json(res,200,{items:await store.listFavorites(user.id)});}
     if(/^\/api\/favorites\/\d+$/.test(path)&&["POST","DELETE"].includes(req.method)){const user=await store.sessionUser(bearer(req));if(!user)return json(res,401,{error:"Inicia sesión"});const vehicleId=Number(path.split("/").pop());if(req.method==="POST")await store.saveFavorite(user.id,vehicleId);else await store.deleteFavorite(user.id,vehicleId);return json(res,req.method==="POST"?201:200,{saved:req.method==="POST"});}
+    if(req.method==="POST"&&path==="/api/prequalification")return await prequalificationRoute(req,res,store,bureau,now);
     if(req.method==="POST"&&path==="/api/reservations")return await createReservationRoute(req,res,store,settings,now,messaging);
     if(req.method==="POST"&&path==="/api/reservations/verify")return await verifyReservationRoute(req,res,store,settings,now);
     if(req.method==="POST"&&path==="/api/reservations/resend")return await resendCodeRoute(req,res,store,now,messaging);
@@ -149,4 +151,21 @@ async function simulatedChargeRoute(req,res,store,settings){
   const sim=await store.createSimPayment({clientTransactionId:row.client_tx_id,method:outcome.method,statusCode:outcome.statusCode,amountCents:row.amount_cents,cardBrand:outcome.cardBrand,lastDigits:outcome.lastDigits,authorizationCode:outcome.statusCode===APPROVED?simulatedAuthorizationCode():null,message:outcome.message});
   // Igual que PayPhone: se devuelve el id de la transacción para redirigir a la URL de respuesta.
   return json(res,201,{id:sim.id,clientTransactionId:row.client_tx_id,statusCode:sim.status_code});
+}
+
+async function prequalificationRoute(req,res,store,bureau,now){
+  const input=validatePrequalInput(await readBody(req));
+  if(input.error)return json(res,400,{error:input.error});
+  const vehicle=await store.getVehicle(input.vehicleId);
+  if(!vehicle)return json(res,404,{error:"Vehículo no encontrado"});
+  const current=now(),cedulaHash=hashCedula(input.cedula);
+  // Una misma cédula no se vuelve a consultar al buró dentro de 24 h: se reutiliza el reporte (evita costos y consultas repetidas).
+  const previous=await store.lastBureauInquiry(cedulaHash,new Date(current.getTime()-REUSE_HOURS*3600000));
+  let report;
+  try{report=previous?previous.report:await queryBureau(input.cedula,bureau);}
+  catch(error){console.error("Bureau error",error);return json(res,502,{error:"No pudimos consultar el buró en este momento. Intenta de nuevo en unos minutos."});}
+  const decision=decideCredit({report,income:input.income,price:Number(vehicle.price)});
+  const row=await store.createBureauInquiry({folio:newFolio(current),cedulaHash,cedulaMasked:maskCedula(input.cedula),vehicleId:vehicle.id,income:input.income,provider:previous?previous.provider:bureau.provider,consentVersion:CONSENT_VERSION,consentAt:current,report,decisionStatus:decision.status,decision,reusedFrom:previous?.folio,createdAt:current});
+  await store.createLead({kind:"prequalification",vehicleId:vehicle.id,message:`Precalificación ${row.folio}: ${decision.status} (score ${report.score??"sin historial"}, ingreso USD ${input.income})`});
+  return json(res,201,{folio:row.folio,provider:row.provider==="simulado"?"Buró de prueba (simulado)":row.provider,consultedAt:current.toISOString(),reused:Boolean(previous),consentVersion:CONSENT_VERSION,cedulaMasked:row.cedula_masked,report:publicReport(report),decision});
 }

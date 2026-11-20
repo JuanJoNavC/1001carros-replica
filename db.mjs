@@ -86,6 +86,8 @@ const schemaSql=`
   CREATE INDEX IF NOT EXISTS vehicles_catalog_idx ON vehicles(status,condition,category,brand);
   CREATE TABLE IF NOT EXISTS reservations (id SERIAL PRIMARY KEY,client_tx_id TEXT UNIQUE NOT NULL,vehicle_id INTEGER NOT NULL REFERENCES vehicles(id),agency_id INTEGER REFERENCES agencies(id),name TEXT NOT NULL,email TEXT NOT NULL,phone TEXT NOT NULL,document_id TEXT,amount_cents INTEGER NOT NULL,mode TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',payphone_id BIGINT,authorization_code TEXT,card_brand TEXT,last_digits TEXT,failure_reason TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,paid_at TIMESTAMPTZ);
   CREATE INDEX IF NOT EXISTS reservations_vehicle_idx ON reservations(vehicle_id,status);
+  CREATE TABLE IF NOT EXISTS bureau_inquiries (id SERIAL PRIMARY KEY,folio TEXT UNIQUE NOT NULL,cedula_hash TEXT NOT NULL,cedula_masked TEXT NOT NULL,vehicle_id INTEGER REFERENCES vehicles(id),income INTEGER NOT NULL,provider TEXT NOT NULL,consent_version TEXT NOT NULL,consent_at TIMESTAMPTZ NOT NULL,report JSONB NOT NULL,decision_status TEXT NOT NULL,decision JSONB NOT NULL,reused_from TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+  CREATE INDEX IF NOT EXISTS bureau_inquiries_cedula_idx ON bureau_inquiries(cedula_hash,created_at);
   ALTER TABLE reservations ADD COLUMN IF NOT EXISTS phone_norm TEXT;
   ALTER TABLE reservations ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ;
   ALTER TABLE reservations ADD COLUMN IF NOT EXISTS otp_hash TEXT;
@@ -150,6 +152,8 @@ export function createStore(pool){
     async countSimPayments(clientTransactionId){return (await run("SELECT COUNT(*)::int count FROM sim_payments WHERE client_tx_id=$1",[clientTransactionId])).rows[0].count;},
     async setReservationDocument(clientTransactionId,documentId){return (await run("UPDATE reservations SET document_id=$2 WHERE client_tx_id=$1 RETURNING *",[clientTransactionId,documentId])).rows[0];},
     async setReservationVisit(clientTransactionId,visitAt){return (await run("UPDATE reservations SET visit_at=$2 WHERE client_tx_id=$1 RETURNING *",[clientTransactionId,visitAt])).rows[0];},
+    async lastBureauInquiry(cedulaHash,since){return (await run("SELECT * FROM bureau_inquiries WHERE cedula_hash=$1 AND reused_from IS NULL AND created_at>=$2 ORDER BY created_at DESC LIMIT 1",[cedulaHash,since])).rows[0]||null;},
+    async createBureauInquiry(data){return (await run("INSERT INTO bureau_inquiries (folio,cedula_hash,cedula_masked,vehicle_id,income,provider,consent_version,consent_at,report,decision_status,decision,reused_from,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11::jsonb,$12,$13) RETURNING *",[data.folio,data.cedulaHash,data.cedulaMasked,data.vehicleId,data.income,data.provider,data.consentVersion,data.consentAt,JSON.stringify(data.report),data.decisionStatus,JSON.stringify(data.decision),data.reusedFrom||null,data.createdAt])).rows[0];},
     async close(){await pool.end();}
   };
 }

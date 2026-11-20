@@ -101,3 +101,12 @@ Para activar los pagos reales o de prueba de PayPhone:
 3. **Después de pagar:** el cliente agenda su visita y, de forma opcional, registra su cédula o RUC ("Lo completo en la agencia").
 
 El buró de crédito no se usa para reservar: queda en la precalificación, con autorización expresa del cliente.
+
+## Precalificación con buró de crédito
+
+`POST /api/prequalification` consulta el buró, aplica el motor de decisión (`bureau.mjs`) y guarda cada consulta en `bureau_inquiries` con folio, versión y fecha de la autorización (la cédula se guarda cifrada y enmascarada).
+
+- **Buró simulado** (por defecto): devuelve un reporte con la estructura de uno real (score 0–999, deudas vigentes, cuota mensual de deudas, mayor atraso en 24 meses y consultas recientes). Para conectar Equifax o Aval se implementa `queryBureau` y se define `BURO_PROVIDER`.
+- **Motor de decisión:** capacidad de pago = 40% del ingreso − cuota de deudas actuales; tasas por perfil sin superar el techo legal de consumo (16,77%); resultados: precalificado, con más entrada, revisión de un asesor o no precalificado.
+- Una misma cédula no se vuelve a consultar dentro de 24 h (se reutiliza el reporte).
+- **Cédulas de prueba:** `1700000019` excelente, `1700000027` bueno, `1700000035` deudas altas, `1700000043` con mora, `1700000050` sin historial.
