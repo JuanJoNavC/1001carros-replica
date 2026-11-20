@@ -108,7 +108,7 @@ test("fallback offers the menu", () => {
 });
 test("handoff url prefilled with summary of topics", () => {
   const msgs = [{ role: "user", text: "garantia", intent: "garantia", at: NOW.toISOString() }];
-  const url = buildHandoffUrl(msgs, { number: "593991001001" });
+  const url = buildHandoffUrl(msgs, { number: "593964141111" });
   const text = decodeURIComponent(url.split("text=")[1]);
   assert.match(text, /asistente virtual/i);
   assert.match(text, /garantia/i);

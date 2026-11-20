@@ -9,6 +9,10 @@ const write = (area, key, value) => { try { store(area).setItem(key, JSON.string
 const saved = read("sessionStorage", HISTORY_KEY, {});
 const session = { messages: Array.isArray(saved.messages) ? saved.messages : [], flow: saved.flow || null, open: false };
 const data = { vehicles: [], agencies: [], loaded: false };
+const ai = { checked: false, enabled: false };
+const AI_GREETING = "¡Hola! Soy Mil, tu asesor virtual de 1001Carros. Puedo buscarte un carro, calcular tu cuota, precalificarte, reservar y ayudarte con tus documentos. ¿Qué carro estás buscando? (Uso inteligencia artificial y puedo equivocarme; no compartas tu cédula ni datos de tarjeta por aquí.)";
+const AI_CHIPS = ["Busco una SUV familiar", "¿Cuánto pagaría al mes?", "Quiero reservar un carro", "¿Qué documentos necesito?", "Hablar con un asesor"];
+async function checkAi() { if (ai.checked) return ai.enabled; ai.checked = true; try { ai.enabled = Boolean((await (await fetch("/api/assistant/status")).json()).ai); } catch { ai.enabled = false; } updateHeader(); return ai.enabled; }
 const el = (tag, attrs = {}, ...children) => {
   const node = Object.assign(document.createElement(tag), attrs);
   node.append(...children);
@@ -44,6 +48,12 @@ function persist() {
 function renderBubble(m) {
   const bubble = el("div", { className: `assistant-msg ${m.role}` }, el("p", { textContent: m.text }));
   if (m.cars?.length) bubble.append(el("ul", { className: "assistant-cars" }, ...m.cars.map(c => el("li", {}, el("a", { href: c.href, textContent: `${c.label} · $${Number(c.price).toLocaleString("es-EC")}` }, ), ))));
+  for (const action of m.actions || []) {
+    const external = /^https?:/.test(action.href);
+    const a = el("a", { href: action.href, textContent: action.label, className: `assistant-link assistant-action ${action.type}` });
+    if (external) { a.target = "_blank"; a.rel = "noopener"; } else a.setAttribute("data-route", "");
+    bubble.append(a);
+  }
   for (const link of m.links || []) {
     const external = /^https?:/.test(link.href);
     const a = el("a", { href: link.href, textContent: link.label, className: "assistant-link" });
@@ -55,7 +65,7 @@ function renderBubble(m) {
 }
 function render(chipList) {
   log.replaceChildren(...session.messages.map(renderBubble));
-  chips.replaceChildren(...(chipList || CHIPS).map(label => el("button", { type: "button", textContent: label, className: "assistant-chip" })));
+  chips.replaceChildren(...(chipList || (ai.enabled ? AI_CHIPS : CHIPS)).map(label => el("button", { type: "button", textContent: label, className: "assistant-chip" })));
   log.scrollTop = log.scrollHeight;
 }
 async function loadData() {
@@ -89,6 +99,7 @@ async function send(text) {
 }
 async function sendReply(text) {
   await loadData();
+  if (await checkAi()) return sendAiReply(text);
   const now = new Date();
   const result = answer(text, { vehicles: data.vehicles, agencies: data.agencies, flow: session.flow, now, messages: session.messages, currentVehicleId: currentVehicleId() });
   session.messages.push({ role: "user", text, at: now.toISOString(), intent: result.intent, handoff: result.handoff });
@@ -109,7 +120,8 @@ function setOpen(open) {
   button.setAttribute("aria-expanded", String(open));
   button.setAttribute("aria-label", open ? "Cerrar asistente virtual" : "Abrir asistente virtual");
   if (open) {
-    if (!session.messages.length) { session.messages.push({ role: "bot", text: GREETING, at: new Date().toISOString(), intent: "saludo" }); persist(); }
+    window.M1001?.track("assistant_open");
+    if (!session.messages.length) { session.messages.push({ role: "bot", text: ai.enabled ? AI_GREETING : GREETING, at: new Date().toISOString(), intent: "saludo" }); persist(); }
     render();
     input.focus();
   } else button.focus();
@@ -127,3 +139,47 @@ form.addEventListener("submit", event => { event.preventDefault(); const text = 
 
 document.body.append(button, panel);
 
+
+// ---------------- Asesor con IA (agente en el servidor) ----------------
+function readJson(area, key) { try { return JSON.parse(store(area).getItem(key) || "null"); } catch { return null; } }
+function buildContext() {
+  const vehicleId = currentVehicleId(), car = data.vehicles.find(item => item.id === vehicleId);
+  const prequalStore = readJson("localStorage", "1001-prequal") || {}, records = Object.values(prequalStore.records || {}).filter(r => r?.offer);
+  const record = (vehicleId && prequalStore.records?.[vehicleId]) || records.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+  const bureau = readJson("localStorage", "1001-bureau");
+  const reservations = (readJson("localStorage", "1001-reservations") || []).filter(r => r?.clientTransactionId).map(r => ({ vehicleId: r.vehicleId, label: `${r.vehicle?.brand || ""} ${r.vehicle?.model || ""}`.trim(), code: r.clientTransactionId }));
+  return {
+    page: location.pathname,
+    vehicle: car ? { id: car.id, label: `${car.year} ${car.brand} ${car.model}`, price: car.price } : null,
+    prequal: record ? { status: record.decision?.status || "preapproved", vehicleId: record.vehicleId, monthly: record.offer?.monthly, term: record.offer?.term, expiresAt: bureau?.expiresAt || record.reportExpiresAt } : null,
+    reservations,
+    applications: readJson("localStorage", "1001-apps") || {}
+  };
+}
+async function sendAiReply(text) {
+  session.messages.push({ role: "user", text, at: new Date().toISOString(), intent: "ia" });
+  render([]);
+  const typing = typingBubble();
+  log.append(typing);
+  log.scrollTop = log.scrollHeight;
+  let reply;
+  try {
+    const history = session.messages.slice(-16).map(m => ({ role: m.role === "bot" ? "assistant" : "user", text: m.text }));
+    const response = await fetch("/api/assistant/chat", { method: "POST", headers: { "content-type": "application/json", ...(window.M1001?.headers() || {}) }, body: JSON.stringify({ messages: history, context: buildContext() }) });
+    const body = await response.json();
+    if (response.status === 503 && body.code === "ai_disabled") { ai.enabled = false; typing.remove(); session.messages.pop(); updateHeader(); return sendReply(text); }
+    reply = response.ok ? { text: body.text, cars: body.cars || [], actions: body.actions || [] } : { text: body.error || "No pude responder en este momento.", cars: [], actions: [] };
+  } catch {
+    reply = { text: "No pude conectarme. Revisa tu conexión e inténtalo de nuevo.", cars: [], actions: [] };
+  }
+  typing.remove();
+  session.messages.push({ role: "bot", text: reply.text, at: new Date().toISOString(), intent: "ia", cars: reply.cars.map(c => ({ ...c, href: c.href })), actions: reply.actions });
+  persist();
+  render();
+}
+function updateHeader() {
+  const title = panel.querySelector("header strong"), sub = panel.querySelector("header small");
+  if (title) title.textContent = ai.enabled ? "Mil · Asesor virtual" : "Asistente virtual";
+  if (sub) sub.textContent = ai.enabled ? "Con inteligencia artificial" : "Beta de demostración";
+}
+checkAi().then(enabled => { if (enabled && session.messages.length === 1 && session.messages[0].intent === "saludo") session.messages[0].text = AI_GREETING; });

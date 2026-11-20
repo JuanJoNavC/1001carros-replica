@@ -78,3 +78,81 @@ npm test
 ```
 
 Las pruebas usan PostgreSQL en memoria mediante `pg-mem`, sin modificar la base configurada en `DATABASE_URL`. Las imágenes del inventario se cargan desde sitios externos y requieren conexión a internet.
+
+## Reserva en línea con PayPhone
+
+Desde la ficha de cada vehículo el cliente puede **reservarlo por USD 200** (`/reserva/:id`): elige agencia, deja sus datos y paga con la Cajita de Pagos de PayPhone. El resultado se muestra en `/reserva/confirmacion`.
+
+- El servidor fija el monto (20000 centavos) y confirma cada pago con PayPhone (`/api/confirm`) antes de marcar el carro como reservado. PayPhone revierte el cobro si no se confirma en 5 minutos.
+- Las reservas se guardan en la tabla `reservations` (estados: `pending`, `paid`, `canceled`, `failed`, `paid_conflict`). Un carro reservado sigue en el catálogo con la etiqueta "Reservado" y no se puede volver a reservar.
+- **Sin credenciales funciona en modo demostración** con una pasarela simulada que imita a PayPhone (tarjeta o saldo PayPhone, procesamiento, aprobación o rechazo, vencimiento de 10 minutos). Genera una transacción, redirige a `/reserva/confirmacion?id=...&clientTransactionId=...` y el servidor la confirma por el mismo camino que un pago real. Nunca se simula un pago cuando hay un token configurado.
+- La simulación solo acepta tarjetas de prueba (cualquier otro número se rechaza sin enviarse): `4111 1111 1111 1111` y `5555 5555 5555 4444` se aprueban; `4000 0000 0000 0002` (fondos insuficientes) y `5105 1051 0510 5100` (rechazada por el banco) se rechazan.
+
+Para activar los pagos reales o de prueba de PayPhone:
+
+1. En Payphone Developer, crea una aplicación de tipo **WEB** con el dominio del sitio (por ejemplo `1001carros-prueba.vercel.app`) y como URL de respuesta `https://<dominio>/reserva/confirmacion`.
+2. En Vercel → Settings → Environment Variables agrega `PAYPHONE_TOKEN` y `PAYPHONE_STORE_ID` y vuelve a desplegar.
+3. Usa primero el **modo de prueba** de PayPhone (todas las transacciones se aprueban sin cobro real) antes de pasar a producción.
+
+### Filtro antes de reservar (sin pedir cédula)
+
+1. **Reglas invisibles:** una reserva activa por celular o correo; máximo 5 intentos de reserva por persona en 24 h y 3 intentos de pago por reserva; la reserva separa el carro 72 horas y, si no se agenda la visita, vence sola, el carro vuelve a estar disponible y se registra un aviso para gestionar el reembolso.
+2. **Código por WhatsApp:** antes de pagar, el cliente confirma su celular con un código de 6 dígitos (vence en 10 minutos, 5 intentos, reenvío cada 30 segundos). Sin proveedor de mensajes (`OTP_PROVIDER`) el código se muestra en pantalla como simulación.
+3. **Después de pagar:** el cliente agenda su visita y, de forma opcional, registra su cédula o RUC ("Lo completo en la agencia").
+
+El buró de crédito no se usa para reservar: queda en la precalificación, con autorización expresa del cliente.
+
+## Precalificación con buró de crédito
+
+`POST /api/prequalification` consulta el buró, aplica el motor de decisión (`bureau.mjs`) y guarda cada consulta en `bureau_inquiries` con folio, versión y fecha de la autorización (la cédula no se guarda completa: solo un hash irreversible y la versión enmascarada).
+
+- **Buró simulado** (por defecto): devuelve un reporte con la estructura de uno real (score 0–999, deudas vigentes, cuota mensual de deudas, mayor atraso en 24 meses y consultas recientes). Para conectar Equifax o Aval se implementa `queryBureau` y se define `BURO_PROVIDER`.
+- **Motor de decisión:** capacidad de pago = 40% del ingreso − cuota de deudas actuales; tasas por perfil sin superar el techo legal de consumo (16,77%); resultados: precalificado, con más entrada, revisión de un asesor o no precalificado.
+- **Control del costo:** una persona se consulta en el buró una sola vez; el reporte queda vigente 30 días (`BURO_REPORT_DAYS`) y se reutiliza para precalificarla en otros carros (`POST /api/prequalification/reuse`), sin pedir la cédula de nuevo. Si escribe su cédula otra vez dentro de la vigencia, tampoco se consulta. Al vencer, la siguiente precalificación hace una consulta nueva. Cada registro indica si fue consulta nueva o reutilizada.
+- **Cédulas de prueba:** `1700000019` excelente, `1700000027` bueno, `1700000035` deudas altas, `1700000043` con mora, `1700000050` sin historial.
+
+## Documentos, verificación y contrato
+
+Después de reservar (o desde la precalificación), el cliente completa su expediente en `/documentos?vehiculo=ID`:
+
+1. **Documentos:** cédula (ambos lados), certificado de votación (o "No aplica" si está exento), planilla de servicios básicos y, según su situación laboral, roles de pago (dependiente) o estados de cuenta y RUC (independiente). Las fotos se comprimen en el navegador y se guardan en la tabla `application_files`.
+2. **Verificación:** los datos se comparan con el Registro Civil (simulado; `REGISTRO_PROVIDER` para conectar uno real) y con la cédula de la precalificación. El cliente confirma "Mis datos son correctos" o marca "Un dato está incorrecto o mal escrito", corrige y se verifica de nuevo; si aún no coincide, lo envía a un asesor.
+3. **Contrato y firma:** se genera el contrato con los datos verificados, la reserva y el financiamiento precalificado (con huella SHA-256). Se firma en línea (demostración, sin validez legal) o en la agencia; se puede imprimir o guardar en PDF.
+
+**Panel del asesor** (`/asesor`): requiere la variable `ASESOR_KEY`. Muestra los expedientes (primero los que esperan revisión), los documentos subidos y permite aprobar o corregir los datos, o pedir que el cliente vuelva a subir un documento.
+
+**Cédulas de prueba del Registro Civil simulado:** `1700000019` María José Pérez López, `1700000027` Carlos Andrés Mora Vera, `1700000035` Ana Lucía Torres Ruiz, `1700000043` Jorge Luis Cevallos Paz, `1700000050` Daniela Fernanda Ríos Vega. Para cualquier otra cédula válida, el registro simulado acepta el nombre escrito.
+
+## Asesor virtual con IA (agente)
+
+El chat del sitio usa un agente de IA (Claude, de Anthropic) cuando existe la variable `ANTHROPIC_API_KEY`; sin ella, sigue funcionando el asistente por reglas.
+
+- **Instrucciones y conocimiento** (editables en español): `asistente/instrucciones.md` y `asistente/conocimiento.md`.
+- **Herramientas del agente** (`agent.mjs`): buscar carros, ver un carro, calcular cuota, listar agencias, cotizar el carro del cliente, estado del trámite, y botones para precalificarse, reservar, agendar test drive, subir documentos o hablar con un asesor por WhatsApp.
+- **Límites en el código:** el agente no paga, no firma ni acepta la autorización del buró; solo abre las pantallas seguras. Las cédulas y números de tarjeta se ocultan antes de enviar el mensaje al modelo. Máximo 20 mensajes por minuto por visitante y 40 por conversación.
+- **Modelo:** `claude-haiku-5-5` por defecto (configurable con `ASISTENTE_MODEL`).
+
+## Vender mi carro (cotizador con fotos, video y evaluador)
+
+`/vender` es un cotizador en 6 pasos: datos del carro (con consulta de placa), estado, papeles y valores pendientes, datos de contacto, 9 fotos obligatorias + video del motor, y oferta.
+
+- **Fórmula**: «Pricing 2.0» de 1001Carros, en `cotizador/politica.json` (editable sin programar): precio de nuevo sin IVA × (1 − depreciación del grupo de marca por años) × ajuste por kilometraje (promedio 18.496 km/año) × ponderación por placa − margen (9%) − reparaciones − valores pendientes. Si un modelo no tiene precio de nuevo en `precios_nuevos`, se estima con el catálogo.
+- **Pasa al evaluador**: choque fuerte/estructural, airbags, testigos o ruidos de motor, más de 2 piezas con golpes, más de 9 años, más de 250.000 km, revisión técnica no aprobada, carro a nombre de otra persona, prenda alta o modelo sin referencia.
+- **Panel**: `/asesor` → pestaña «Tasaciones de carros» con fotos, video, cálculo y el precio aprobado.
+- **Placa (simulada)**: PBA1234 sin pendientes, PCD5678 multas y matrícula, GYE2020 con prenda, ABC1111 revisión no aprobada. Conectar ANT/AMT/SRI con `PLACA_PROVIDER`.
+- Supuestos por confirmar con la empresa: ajuste por km (1% por cada 10% de diferencia, tope 8%), ponderación por placa (1,00), costos de reparación salvo frenos (USD 340).
+
+## Medición del cliente: de la web a la venta
+
+- **Registro propio, sin terceros** (`tracking.js`): solo si el cliente acepta el aviso de cookies. Guarda el origen (UTM, gclid/fbclid, sitio de origen) y eventos: páginas, fichas, calculadora, precalificación, asistente, WhatsApp, reserva, documentos y cotizador.
+- **WhatsApp con referencia**: cada mensaje lleva `(Ref. 1001-XXXXX)` para que el asesor sepa qué hizo el cliente en la web.
+- **Panel del asesor → «Clientes y etapas»**: Nuevo → Contactado → Cita agendada → Cita asistida → Reservado → Vendido / Perdido (con motivo). Muestra el recorrido web y permite registrar clientes de WhatsApp con su código.
+- **Tablero del analista** en `/analista`, protegido con `ANALISTA_KEY` (variable de entorno en Vercel, distinta de `ASESOR_KEY`): indicadores del BSC con semáforo, recorrido de 8 etapas, canales, herramientas, asesores, motivos de pérdida y tasaciones. Tiene «Datos reales» y «Datos de ejemplo».
+- **Metas** en `medicion/metas.json` (editables sin programar), tomadas de «Indicadores del Balanced Scorecard».
+
+## Mejoras de la ficha del carro
+
+- **Reserva con monto libre**: mínimo USD 200; el cliente puede abonar más (opciones rápidas u otro monto) hasta el 30% del precio y máximo USD 5.000 por pago. Todo se descuenta del precio y es reembolsable.
+- **Agenda de test drive** (`/reservar/:id` o `/test-drive/:id`): agencia → fecha y hora (lun–vie 09:00–17:00, sáb 10:00–16:00, sin domingos; 2 horas de anticipación o 2 días si el carro se traslada de ciudad) → datos → confirmación con calendario (.ics), WhatsApp y mapa. Evita dos citas a la misma hora para el mismo carro y marca al cliente como «Cita agendada» en el panel del asesor.
+- **«Empezar ahora» → Tu camino de compra**: los pasos en línea del carro (test drive, cuota, parte de pago, reserva, documentos) con lo que el cliente ya hizo, el siguiente paso recomendado y cuánto le falta pagar.
+- **Vista 360°** (`viewer360.js`, three.js en `assets/vendor/three`): modelo 3D ilustrativo según el tipo y color del carro, con golpes y rayones simulados de la inspección de 150 puntos, marcados y explicados. Se abre desde la galería, el historial y el catálogo. En producción se reemplaza por fotos 360° reales del alistamiento.

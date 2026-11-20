@@ -2,8 +2,10 @@
 // Facts are reused from existing site copy; when data is missing the assistant says so.
 
 export const ORIGIN_CODE = "WEB-ASSISTANT";
-// Company WhatsApp shown on the contact page (099 100 1001) in international format.
-export const WHATSAPP_NUMBER = "593991001001";
+// WhatsApp oficial de 1001carros.com (botón de WhatsApp de su sitio web). Único lugar donde se define.
+export const WHATSAPP_NUMBER = "593964141111";
+export const WHATSAPP_DISPLAY = "096 414 1111";
+export const whatsappUrl = text => `https://wa.me/${WHATSAPP_NUMBER}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
 
 const LINK = {
   catalog: { label: "Ver catálogo", href: "/catalogo" },

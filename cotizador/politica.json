@@ -1,0 +1,80 @@
+{
+  "_nota": "Política de compra de 1001Carros.com según 'Proceso de compra de vehículos y pricing' (sesiones con la empresa, video 4: Pricing dinámico). Montos en USD. Los campos que empiezan con _ son explicaciones.",
+
+  "_formula": "Pricing 2.0: precio de nuevo (sin IVA) x (1 - depreciación del grupo de marca según años) x ajuste por kilometraje x ponderación por placa x (1 - margen). Luego se restan las reparaciones y, si el cliente lo elige, los valores pendientes.",
+
+  "margen_ganancia": 0.09,
+  "_margen_ganancia": "Entre 8% y 10% según la empresa (video 4, min 01:04). Se usa el punto medio.",
+
+  "grupos_marcas": {
+    "0": ["toyota"],
+    "1": ["chevrolet", "kia", "hyundai", "great wall", "nissan", "suzuki"],
+    "2": ["chery", "renault", "mazda", "ford", "volkswagen"],
+    "3": ["jac", "dfsk", "dongfeng", "shineray", "peugeot", "soueast"],
+    "4": ["citroen", "changan", "mitsubishi", "jetour"],
+    "_otras": "Cualquier otra marca es grupo 5."
+  },
+
+  "depreciacion_por_anios": {
+    "_nota": "Depreciación acumulada por años del vehículo (0 a 9) para cada grupo (G0 a G5).",
+    "0": [0.095, 0.122, 0.149, 0.176, 0.203, 0.230],
+    "1": [0.133, 0.166, 0.198, 0.231, 0.264, 0.296],
+    "2": [0.170, 0.210, 0.250, 0.290, 0.329, 0.369],
+    "3": [0.206, 0.256, 0.305, 0.354, 0.403, 0.452],
+    "4": [0.241, 0.287, 0.333, 0.379, 0.425, 0.471],
+    "5": [0.278, 0.334, 0.389, 0.444, 0.500, 0.555],
+    "6": [0.322, 0.381, 0.441, 0.500, 0.560, 0.619],
+    "7": [0.362, 0.415, 0.469, 0.522, 0.575, 0.628],
+    "8": [0.396, 0.456, 0.516, 0.576, 0.636, 0.696],
+    "9": [0.428, 0.489, 0.550, 0.611, 0.672, 0.733]
+  },
+
+  "km_promedio_portafolio": 18496,
+  "_km_promedio_portafolio": "Promedio de recorrido del portafolio por año. Con menos km el auto recibe un beneficio; con más, un castigo proporcional.",
+  "ajuste_km_por_cada_10pct": 0.01,
+  "ajuste_km_maximo": 0.08,
+  "_ajuste_km": "SUPUESTO DEL PROTOTIPO: 1% del valor por cada 10% de diferencia con el recorrido esperado, con un tope de 8% hacia arriba o hacia abajo. Confirmar con la empresa.",
+
+  "ponderacion_por_placa": {
+    "_nota": "Ajuste según la provincia de origen (primera letra de la placa). SUPUESTO DEL PROTOTIPO: todas en 1.00 hasta tener los valores reales.",
+    "P": 1.0, "G": 1.0, "A": 1.0, "T": 1.0, "I": 1.0, "L": 1.0, "M": 1.0, "O": 1.0, "R": 1.0, "U": 1.0, "otras": 1.0
+  },
+
+  "precios_nuevos": {
+    "_nota": "Precio actual del modelo nuevo, SIN IVA (base del cálculo). Agregar aquí los reales con el formato 'marca modelo': precio. Si un modelo no está, el sistema lo estima con los carros del catálogo y la tabla de depreciación.",
+    "_ejemplo": { "toyota rav4": 0 }
+  },
+
+  "costos_reparacion": {
+    "_nota": "Lista referencial de costos de alistamiento; las reparaciones las asume el cliente y se descuentan. Frenos USD 340 según la herramienta de la empresa; los demás son valores de ejemplo para el prototipo.",
+    "frenos": 340,
+    "llantas_medias": 200,
+    "llantas_cambiar": 450,
+    "parabrisas_trizado": 300,
+    "pintura_por_pieza": 180,
+    "golpe_por_pieza": 250,
+    "choque_leve": 250,
+    "aire_no_funciona": 350,
+    "una_sola_llave": 250,
+    "tapiceria_danada": 250,
+    "mantenimiento_atrasado": 200
+  },
+
+  "valores_pendientes": {
+    "matricula_pendiente": 250,
+    "_nota": "Las multas y la matrícula se consultan con la placa. El cliente decide si se descuentan de la oferta o si las paga antes. El saldo de prenda siempre se descuenta porque 1001Carros lo paga a la entidad."
+  },
+
+  "rango_oferta": 0.03,
+  "validez_dias": 3,
+  "_validez_dias": "La oferta es válida por 3 días; después el auto se vuelve a avaluar (video 4).",
+  "oferta_minima": 1000,
+
+  "pasa_a_evaluador": {
+    "anios_maximo_tabla": 9,
+    "km_maximo": 250000,
+    "piezas_con_golpes_maximo": 2,
+    "prenda_maxima_sobre_valor": 0.6,
+    "_reglas_fijas": "Siempre pasan al coordinador de avalúos: choque fuerte o estructural, airbags activados, testigos de motor encendidos, ruidos o fugas, revisión técnica no aprobada, carro que no está a nombre del vendedor, carros con más años que la tabla de depreciación, y modelos sin precio de referencia."
+  }
+}
