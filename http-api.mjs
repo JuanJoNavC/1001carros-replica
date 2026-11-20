@@ -440,12 +440,14 @@ async function asesorClientRoutes(req,res,store,parts,url,now){
 
 // ---------------- Tablero del analista ----------------
 async function analistaRoutes(req,res,store,url,key,now){
-  if(!key)return json(res,503,{error:"El tablero del analista no está configurado. Define ANALISTA_KEY en las variables de entorno de Vercel.",code:"analista_not_configured"});
-  const provided=String(req.headers["x-analista-key"]||"");if(provided.length!==key.length||provided!==key)return json(res,401,{error:"Clave de analista incorrecta.",code:"analista_unauthorized"});
+  if(req.method==="GET"&&url.pathname==="/api/analista/status")return json(res,200,{protected:Boolean(key)});
+  // Sin ANALISTA_KEY el tablero queda abierto en modo prototipo (solo muestra totales, sin datos personales).
+  if(key){const provided=String(req.headers["x-analista-key"]||"");if(provided.length!==key.length||provided!==key)return json(res,401,{error:"Clave de analista incorrecta.",code:"analista_unauthorized"});}
+  if(req.method==="GET"&&url.pathname==="/api/analista/status")return json(res,200,{protected:Boolean(key)});
   if(req.method==="GET"&&url.pathname==="/api/analista/dashboard"){
     const {from,to,period}=periodRange(String(url.searchParams.get("period")||"mes"),now());const targets=loadTargets();
     const item=url.searchParams.get("mode")==="demo"?demoDashboard({targets,from,to,now:now()}):computeDashboard(await store.metricsRaw(from,to),{targets,from,to,now:now()});
-    return json(res,200,{item:{...item,period}});}
+    return json(res,200,{item:{...item,period},open:!key});}
   return json(res,404,{error:"Ruta no encontrada"});
 }
 

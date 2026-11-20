@@ -79,7 +79,9 @@ test("del clic en Instagram a la venta: eventos, embudo, asesor y tablero",async
   assert.equal(lost.body.item.lostReason,"Precio");
   // El tablero del analista exige su propia clave.
   assert.equal((await call(store,"GET","/api/analista/dashboard",null,DEPS,ase)).status,401);
-  assert.equal((await call(store,"GET","/api/analista/dashboard",null,{...DEPS,analistaKey:""},ana)).status,503);
+  const open=await call(store,"GET","/api/analista/dashboard",null,{...DEPS,analistaKey:""});
+  assert.equal(open.status,200);assert.equal(open.body.open,true);
+  assert.equal((await call(store,"GET","/api/analista/status",null,DEPS)).body.protected,true);
   const dash=(await call(store,"GET","/api/analista/dashboard?period=mes",null,DEPS,ana)).body.item;
   assert.equal(dash.mode,"real");assert.equal(dash.totals.sessions,2);assert.equal(dash.totals.leads,2);assert.equal(dash.totals.sales,1);
   const k=Object.fromEntries(dash.kpis.map(x=>[x.id,x]));
