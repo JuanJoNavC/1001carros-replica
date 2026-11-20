@@ -12,7 +12,8 @@
 // y el servidor la confirma por el MISMO camino (interpretConfirmation) que un pago real.
 // La simulación solo acepta tarjetas de prueba y nunca se usa si hay un token configurado.
 
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomInt, createHash } from "node:crypto";
+import { isValidCedula } from "./prequalification.mjs";
 
 export const RESERVATION_AMOUNT_USD = 200;
 export const RESERVATION_AMOUNT_CENTS = RESERVATION_AMOUNT_USD * 100;
@@ -137,6 +138,11 @@ export function publicReservation(row, vehicle = null) {
     cardBrand: row.card_brand,
     lastDigits: row.last_digits,
     authorizationCode: row.authorization_code,
+    phoneVerified: Boolean(row.phone_verified_at),
+    maskedPhone: maskPhone(row.phone),
+    documentProvided: Boolean(row.document_id),
+    expiresAt: row.expires_at ?? null,
+    visitAt: row.visit_at ?? null,
     vehicle: vehicle ? { id: vehicle.id, brand: vehicle.brand, model: vehicle.model, year: vehicle.year, code: vehicle.code, price: Number(vehicle.price), image: vehicle.image ?? "" } : null
   };
 }
@@ -184,4 +190,44 @@ export function simulatedConfirmBody(sim, reservation) {
     lastDigits: sim.last_digits,
     message: sim.message
   };
+}
+
+// ---- Filtro antes de reservar (capas 1 y 2) ----
+export const HOLD_HOURS = 72;               // la reserva separa el carro 72 h si no se agenda visita
+export const MAX_RESERVATIONS_PER_DAY = 5;  // intentos de reserva por celular o correo en 24 h
+export const MAX_SIM_CHARGES = 3;           // intentos de pago por reserva (simulación)
+export const OTP_TTL_MINUTES = 10;
+export const OTP_MAX_ATTEMPTS = 5;
+export const OTP_RESEND_SECONDS = 30;
+export const OTP_MAX_SENDS = 4;
+
+// Celular en formato único (+5939XXXXXXXX) para comparar personas.
+export function normalizePhone(phone) {
+  return toPayphonePhone(phone) || String(phone || "").replace(/\D/g, "");
+}
+
+export function maskPhone(phone) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  return digits.length >= 4 ? `••• ${digits.slice(-4)}` : "•••";
+}
+
+export function newOtpCode() {
+  return String(randomInt(0, 1000000)).padStart(6, "0");
+}
+
+export function hashOtp(code, clientTransactionId) {
+  return createHash("sha256").update(`${clientTransactionId}:${code}`).digest("hex");
+}
+
+// Cédula ecuatoriana (10 dígitos con dígito verificador) o RUC (13 dígitos terminado en 001).
+export function isValidDocument(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length === 10) return isValidCedula(digits);
+  if (digits.length === 13) return digits.endsWith("001");
+  return false;
+}
+
+// Proveedor de mensajes: sin proveedor configurado, el código se muestra en pantalla (simulación).
+export function messagingSettings(env = process.env) {
+  return { mode: env.OTP_PROVIDER ? "provider" : "demo" };
 }

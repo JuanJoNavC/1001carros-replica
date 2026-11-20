@@ -1421,3 +1421,26 @@ a.sticky-reserve { padding:0 18px; text-decoration:none; }
 .sim-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
 .sim-box { max-width:100%; }
 .reserve-refund { margin:-6px 0 15px !important; padding:8px 10px; border-radius:7px; background:#e8f7ef; color:#16603d !important; font-size:12px !important; }
+
+/* Verificación del celular y extras de la confirmación */
+.otp-sim { margin:18px 0 4px; padding:12px 14px; border-radius:12px; background:#e7f8ee; border:1px solid #bfe8cf; color:#14532d; }
+.otp-sim-app { display:block; margin-bottom:4px; color:#15803d; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+.otp-sim p { margin:0; font-size:14px; }
+.otp-sim b { font-size:17px; letter-spacing:.18em; }
+.otp-sim small { display:block; margin-top:6px; color:#3f6b52; font-size:11px; }
+.otp-form { display:grid; gap:12px; margin-top:18px; }
+.otp-form label { display:grid; gap:6px; color:#17325d; font-size:13px; font-weight:700; }
+.otp-form input { width:220px; max-width:100%; min-height:52px; padding:0 14px; border:1px solid #b8c3d3; border-radius:12px; color:#0b1d40; font-size:24px; font-weight:800; letter-spacing:.4em; box-sizing:border-box; }
+.otp-form input:focus { outline:2px solid #0867f4; outline-offset:1px; }
+.otp-resend { margin-top:14px; color:#60708d; font-size:13px; }
+.pay-extras { display:grid; gap:12px; margin-top:20px; }
+.pay-extra { display:grid; gap:8px; padding:14px 16px; border:1px solid #dfe5ee; border-radius:12px; background:#f8fafd; }
+.pay-extra b { color:#0a2148; font-size:14px; }
+.pay-extra b small { color:#7b879c; font-weight:600; }
+.pay-extra p { margin:0; color:#4a5874; font-size:13px; }
+.pay-extra.done { border-color:#bfe8cf; background:#e9f8ef; }
+.pay-extra.done b { color:#15803d; }
+.visit-row { display:flex; flex-wrap:wrap; gap:8px; }
+.visit-row select,.visit-row input { min-height:44px; flex:1 1 130px; min-width:0; padding:0 12px; border:1px solid #b8c3d3; border-radius:10px; background:#fff; color:#0b1d40; font-size:14px; box-sizing:border-box; }
+.visit-row .reservation-confirm { min-width:0; min-height:44px; flex:0 0 auto; }
+.pay-extra .sim-link { justify-self:start; padding:0; }

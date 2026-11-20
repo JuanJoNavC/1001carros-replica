@@ -8,7 +8,8 @@ import { simulateCharge, validateReservationInput, toPayphonePhone, buildPayment
 
 const makeStore=()=>{const memory=newDb(),adapter=memory.adapters.createPg();return createStore(new adapter.Pool());};
 async function call(store,method,path,body,deps){const req=Readable.from(body?[JSON.stringify(body)]:[]);req.method=method;req.url=path;req.headers={host:"localhost","content-type":"application/json"};let output="";const res={statusCode:200,setHeader(){},end(value=""){output+=value;}};await handleApi(req,res,new URL(path,"http://localhost"),store,deps);return {status:res.statusCode,body:JSON.parse(output)};}
-const DEMO={settings:{mode:"demo",token:"",storeId:""}};
+const DEMO={settings:{mode:"demo",token:"",storeId:""},messaging:{mode:"demo"}};
+async function createVerified(store,body,deps=DEMO){const created=await call(store,"POST","/api/reservations",body,deps);assert.equal(created.status,201,JSON.stringify(created.body));const verified=await call(store,"POST","/api/reservations/verify",{clientTransactionId:created.body.item.clientTransactionId,code:created.body.verification.demoCode},deps);assert.equal(verified.status,200,JSON.stringify(verified.body));return {created,verified,tx:created.body.item.clientTransactionId};}
 const customer={name:"Ana Pérez",email:"ana@example.com",phone:"0991234567",documentId:"1710034065"};
 
 test("la configuración elige modo demo sin token y PayPhone con token",()=>{
@@ -45,12 +46,10 @@ test("interpreta las respuestas de confirmación de PayPhone",()=>{
 
 test("reserva en modo demostración: el carro queda reservado y no se puede reservar dos veces",async()=>{
   const store=makeStore();
-  const created=await call(store,"POST","/api/reservations",{vehicleId:1,agencyId:1,...customer},DEMO);
-  assert.equal(created.status,201);
+  const {created,tx}=await createVerified(store,{vehicleId:1,agencyId:1,...customer});
   assert.equal(created.body.mode,"demo");
   assert.equal(created.body.item.amount,200);
   assert.equal(created.body.payphone,undefined);
-  const tx=created.body.item.clientTransactionId;
   const noTx=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx},DEMO);
   assert.equal(noTx.status,400);
   const charge=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:tx,method:"card",cardNumber:"4111 1111 1111 1111"},DEMO);
@@ -63,8 +62,11 @@ test("reserva en modo demostración: el carro queda reservado y no se puede rese
   assert.equal((await store.getVehicle(1)).status,"reserved");
   const catalog=await call(store,"GET","/api/vehicles",null,DEMO);
   assert.equal(catalog.body.items.find(car=>car.id===1).badge,"Reservado");
-  const again=await call(store,"POST","/api/reservations",{vehicleId:1,...customer},DEMO);
+  const again=await call(store,"POST","/api/reservations",{vehicleId:1,...customer,email:"otra@example.com",phone:"0980000000"},DEMO);
   assert.equal(again.status,409);
+  assert.match(again.body.error,/reservado/);
+  const sameCustomer=await call(store,"POST","/api/reservations",{vehicleId:9,...customer},DEMO);
+  assert.equal(sameCustomer.body.code,"active_reservation");
   const lookup=await call(store,"GET",`/api/reservations/${tx}`,null,DEMO);
   assert.equal(lookup.body.item.vehicle.id,1);
   await store.close();
@@ -82,13 +84,18 @@ test("con PayPhone confirma el pago en el servidor antes de reservar el carro",a
   const store=makeStore(),settings={mode:"payphone",token:"tok",storeId:"store-1"};
   let sent;
   const fetchImpl=async(url,options)=>{sent={url,options};const body=JSON.parse(options.body);return {json:async()=>({statusCode:3,transactionStatus:"Approved",transactionId:body.id,clientTransactionId:body.clientTxId,amount:20000,authorizationCode:"A1",cardBrand:"Visa",lastDigits:"4242"})};};
-  const created=await call(store,"POST","/api/reservations",{vehicleId:2,...customer},{settings,fetchImpl});
-  assert.equal(created.body.payphone.config.token,"tok");
-  assert.equal(created.body.payphone.config.amount,20000);
+  const deps={settings,fetchImpl,messaging:{mode:"demo"}};
+  const created=await call(store,"POST","/api/reservations",{vehicleId:2,...customer},deps);
+  assert.equal(created.body.payphone,undefined);
   const tx=created.body.item.clientTransactionId;
-  const demoAttempt=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx},{settings,fetchImpl});
+  const unverified=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx,id:555},deps);
+  assert.equal(unverified.status,409);
+  const verified=await call(store,"POST","/api/reservations/verify",{clientTransactionId:tx,code:created.body.verification.demoCode},deps);
+  assert.equal(verified.body.payphone.config.token,"tok");
+  assert.equal(verified.body.payphone.config.amount,20000);
+  const demoAttempt=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx},deps);
   assert.equal(demoAttempt.status,400);
-  const confirmed=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx,id:555},{settings,fetchImpl});
+  const confirmed=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx,id:555},deps);
   assert.equal(sent.url,PAYPHONE_CONFIRM_URL);
   assert.equal(sent.options.headers.authorization,"Bearer tok");
   assert.deepEqual(JSON.parse(sent.options.body),{id:555,clientTxId:tx});
@@ -101,8 +108,8 @@ test("con PayPhone confirma el pago en el servidor antes de reservar el carro",a
 test("un pago cancelado en PayPhone no reserva el carro",async()=>{
   const store=makeStore(),settings={mode:"payphone",token:"tok",storeId:""};
   const fetchImpl=async(url,options)=>{const body=JSON.parse(options.body);return {json:async()=>({statusCode:2,transactionStatus:"Canceled",clientTransactionId:body.clientTxId,amount:20000,message:"Cancelado por el usuario"})};};
-  const created=await call(store,"POST","/api/reservations",{vehicleId:3,...customer},{settings,fetchImpl});
-  const result=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:created.body.item.clientTransactionId,id:7},{settings,fetchImpl});
+  const deps={settings,fetchImpl,messaging:{mode:"demo"}},{tx}=await createVerified(store,{vehicleId:3,...customer},deps);
+  const result=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx,id:7},deps);
   assert.equal(result.body.item.status,"canceled");
   assert.equal((await store.getVehicle(3)).status,"available");
   await store.close();
@@ -110,8 +117,8 @@ test("un pago cancelado en PayPhone no reserva el carro",async()=>{
 
 test("una reserva iniciada con PayPhone no se puede marcar pagada como demostración",async()=>{
   const store=makeStore();
-  const created=await call(store,"POST","/api/reservations",{vehicleId:4,...customer},{settings:{mode:"payphone",token:"tok",storeId:""}});
-  const attempt=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:created.body.item.clientTransactionId},DEMO);
+  const {tx}=await createVerified(store,{vehicleId:4,...customer},{settings:{mode:"payphone",token:"tok",storeId:""},messaging:{mode:"demo"}});
+  const attempt=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx},DEMO);
   assert.equal(attempt.status,503);
   assert.equal((await store.getVehicle(4)).status,"available");
   await store.close();
@@ -126,7 +133,7 @@ test("la pasarela simulada solo acepta tarjetas de prueba",()=>{
 
 test("simulación: tarjeta rechazada deja el carro disponible y se puede reintentar",async()=>{
   const store=makeStore();
-  const created=await call(store,"POST","/api/reservations",{vehicleId:5,...customer},DEMO),tx=created.body.item.clientTransactionId;
+  const {tx}=await createVerified(store,{vehicleId:5,...customer});
   const fake=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:tx,method:"card",cardNumber:"4532015112830366"},DEMO);
   assert.equal(fake.status,400);
   const charge=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:tx,method:"card",cardNumber:"4000000000000002"},DEMO);
@@ -134,9 +141,9 @@ test("simulación: tarjeta rechazada deja el carro disponible y se puede reinten
   assert.equal(result.body.item.status,"canceled");
   assert.match(result.body.reason,/fondos insuficientes/);
   assert.equal((await store.getVehicle(5)).status,"available");
-  const retry=await call(store,"POST","/api/reservations",{vehicleId:5,...customer},DEMO);
-  const balance=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:retry.body.item.clientTransactionId,method:"payphone",approve:true},DEMO);
-  const ok=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:retry.body.item.clientTransactionId,id:balance.body.id},DEMO);
+  const retry=await createVerified(store,{vehicleId:5,...customer});
+  const balance=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:retry.tx,method:"payphone",approve:true},DEMO);
+  const ok=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:retry.tx,id:balance.body.id},DEMO);
   assert.equal(ok.body.item.status,"paid");
   assert.equal(ok.body.item.cardBrand,"Saldo PayPhone");
   await store.close();
@@ -144,8 +151,73 @@ test("simulación: tarjeta rechazada deja el carro disponible y se puede reinten
 
 test("la pasarela simulada no existe cuando PayPhone real está configurado",async()=>{
   const store=makeStore(),settings={mode:"payphone",token:"tok",storeId:""};
-  const created=await call(store,"POST","/api/reservations",{vehicleId:6,...customer},{settings});
-  const charge=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:created.body.item.clientTransactionId,method:"card",cardNumber:"4111111111111111"},{settings});
+  const {tx}=await createVerified(store,{vehicleId:6,...customer},{settings,messaging:{mode:"demo"}});
+  const charge=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:tx,method:"card",cardNumber:"4111111111111111"},{settings});
   assert.equal(charge.status,404);
+  await store.close();
+});
+
+test("capa 2: el código de verificación controla el acceso al pago",async()=>{
+  const store=makeStore();
+  let clock=new Date("2026-11-20T15:00:00Z");const deps={...DEMO,now:()=>clock};
+  const created=await call(store,"POST","/api/reservations",{vehicleId:10,name:"Luis",email:"luis@example.com",phone:"0987654321"},deps),tx=created.body.item.clientTransactionId;
+  assert.equal(created.body.verification.sentTo,"••• 4321");
+  assert.equal(created.body.verification.demoCode.length,6);
+  const charge=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:tx,method:"card",cardNumber:"4111111111111111"},deps);
+  assert.equal(charge.status,409);
+  const wrong=await call(store,"POST","/api/reservations/verify",{clientTransactionId:tx,code:"000000"===created.body.verification.demoCode?"111111":"000000"},deps);
+  assert.match(wrong.body.error,/Te quedan 4 intentos/);
+  const early=await call(store,"POST","/api/reservations/resend",{clientTransactionId:tx},deps);
+  assert.equal(early.status,429);
+  clock=new Date(clock.getTime()+31000);
+  const resent=await call(store,"POST","/api/reservations/resend",{clientTransactionId:tx},deps);
+  assert.equal(resent.status,200);
+  const old=await call(store,"POST","/api/reservations/verify",{clientTransactionId:tx,code:created.body.verification.demoCode},deps);
+  if(created.body.verification.demoCode!==resent.body.verification.demoCode)assert.equal(old.status,400);
+  clock=new Date(clock.getTime()+11*60000);
+  const expired=await call(store,"POST","/api/reservations/verify",{clientTransactionId:tx,code:resent.body.verification.demoCode},deps);
+  assert.equal(expired.body.code,"otp_expired");
+  await store.close();
+});
+
+test("capa 1: límite diario de intentos por celular o correo",async()=>{
+  const store=makeStore(),person={name:"Rita",email:"rita@example.com",phone:"0970000000"};
+  for(let i=0;i<5;i++)assert.equal((await call(store,"POST","/api/reservations",{vehicleId:11+i,...person},DEMO)).status,201);
+  const blocked=await call(store,"POST","/api/reservations",{vehicleId:20,...person,email:"otro@example.com"},DEMO);
+  assert.equal(blocked.status,429);
+  await store.close();
+});
+
+test("capa 1: la reserva vence a las 72 h sin visita y el carro vuelve a estar disponible",async()=>{
+  const store=makeStore();
+  let clock=new Date("2026-11-20T15:00:00Z");const deps={...DEMO,now:()=>clock};
+  const {tx}=await createVerified(store,{vehicleId:21,...customer},deps);
+  const charge=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:tx,method:"card",cardNumber:"4111111111111111"},deps);
+  const paid=await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx,id:charge.body.id},deps);
+  assert.equal(new Date(paid.body.item.expiresAt).toISOString(),"2026-11-23T15:00:00.000Z");
+  clock=new Date("2026-11-23T15:00:01Z");
+  const vehicle=await call(store,"GET","/api/vehicles/21",null,deps);
+  assert.equal(vehicle.body.item.status,"available");
+  assert.equal((await store.getReservation(tx)).status,"expired");
+  await store.close();
+});
+
+test("tras pagar: cédula opcional y visita agendada evitan el vencimiento",async()=>{
+  const store=makeStore();
+  let clock=new Date("2026-11-20T15:00:00Z");const deps={...DEMO,now:()=>clock};
+  const {tx}=await createVerified(store,{vehicleId:22,...customer},deps);
+  const unpaidDoc=await call(store,"POST",`/api/reservations/${tx}/document`,{documentId:"1710034065"},deps);
+  assert.equal(unpaidDoc.status,409);
+  const charge=await call(store,"POST","/api/sim-payphone/charge",{clientTransactionId:tx,method:"card",cardNumber:"5555555555554444"},deps);
+  await call(store,"POST","/api/reservations/confirm",{clientTransactionId:tx,id:charge.body.id},deps);
+  assert.equal((await call(store,"POST",`/api/reservations/${tx}/document`,{documentId:"1710034066"},deps)).status,400);
+  const doc=await call(store,"POST",`/api/reservations/${tx}/document`,{documentId:"1710034065"},deps);
+  assert.equal(doc.body.item.documentProvided,true);
+  assert.equal((await call(store,"POST",`/api/reservations/${tx}/visit`,{visitAt:"2026-11-30T15:00:00Z"},deps)).status,400);
+  const visit=await call(store,"POST",`/api/reservations/${tx}/visit`,{visitAt:"2026-11-22T15:00:00Z"},deps);
+  assert.ok(visit.body.item.visitAt);
+  clock=new Date("2026-11-24T15:00:00Z");
+  await call(store,"GET","/api/vehicles/22",null,deps);
+  assert.equal((await store.getReservation(tx)).status,"paid");
   await store.close();
 });

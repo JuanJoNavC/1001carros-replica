@@ -93,3 +93,11 @@ Para activar los pagos reales o de prueba de PayPhone:
 1. En Payphone Developer, crea una aplicación de tipo **WEB** con el dominio del sitio (por ejemplo `1001carros-prueba.vercel.app`) y como URL de respuesta `https://<dominio>/reserva/confirmacion`.
 2. En Vercel → Settings → Environment Variables agrega `PAYPHONE_TOKEN` y `PAYPHONE_STORE_ID` y vuelve a desplegar.
 3. Usa primero el **modo de prueba** de PayPhone (todas las transacciones se aprueban sin cobro real) antes de pasar a producción.
+
+### Filtro antes de reservar (sin pedir cédula)
+
+1. **Reglas invisibles:** una reserva activa por celular o correo; máximo 5 intentos de reserva por persona en 24 h y 3 intentos de pago por reserva; la reserva separa el carro 72 horas y, si no se agenda la visita, vence sola, el carro vuelve a estar disponible y se registra un aviso para gestionar el reembolso.
+2. **Código por WhatsApp:** antes de pagar, el cliente confirma su celular con un código de 6 dígitos (vence en 10 minutos, 5 intentos, reenvío cada 30 segundos). Sin proveedor de mensajes (`OTP_PROVIDER`) el código se muestra en pantalla como simulación.
+3. **Después de pagar:** el cliente agenda su visita y, de forma opcional, registra su cédula o RUC ("Lo completo en la agencia").
+
+El buró de crédito no se usa para reservar: queda en la precalificación, con autorización expresa del cliente.
