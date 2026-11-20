@@ -141,3 +141,11 @@ El chat del sitio usa un agente de IA (Claude, de Anthropic) cuando existe la va
 - **Panel**: `/asesor` → pestaña «Tasaciones de carros» con fotos, video, cálculo y el precio aprobado.
 - **Placa (simulada)**: PBA1234 sin pendientes, PCD5678 multas y matrícula, GYE2020 con prenda, ABC1111 revisión no aprobada. Conectar ANT/AMT/SRI con `PLACA_PROVIDER`.
 - Supuestos por confirmar con la empresa: ajuste por km (1% por cada 10% de diferencia, tope 8%), ponderación por placa (1,00), costos de reparación salvo frenos (USD 340).
+
+## Medición del cliente: de la web a la venta
+
+- **Registro propio, sin terceros** (`tracking.js`): solo si el cliente acepta el aviso de cookies. Guarda el origen (UTM, gclid/fbclid, sitio de origen) y eventos: páginas, fichas, calculadora, precalificación, asistente, WhatsApp, reserva, documentos y cotizador.
+- **WhatsApp con referencia**: cada mensaje lleva `(Ref. 1001-XXXXX)` para que el asesor sepa qué hizo el cliente en la web.
+- **Panel del asesor → «Clientes y etapas»**: Nuevo → Contactado → Cita agendada → Cita asistida → Reservado → Vendido / Perdido (con motivo). Muestra el recorrido web y permite registrar clientes de WhatsApp con su código.
+- **Tablero del analista** en `/analista`, protegido con `ANALISTA_KEY` (variable de entorno en Vercel, distinta de `ASESOR_KEY`): indicadores del BSC con semáforo, recorrido de 8 etapas, canales, herramientas, asesores, motivos de pérdida y tasaciones. Tiene «Datos reales» y «Datos de ejemplo».
+- **Metas** en `medicion/metas.json` (editables sin programar), tomadas de «Indicadores del Balanced Scorecard».

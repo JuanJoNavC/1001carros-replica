@@ -3,6 +3,7 @@ import { getStore, hashPassword, verifyPassword } from "./db.mjs";
 import { CONSENT_VERSION, reportExpiresAt, bureauSettings, queryBureau, decideCredit, validatePrequalInput, publicReport, hashCedula, maskCedula, newFolio } from "./bureau.mjs";
 import { newApplicationToken, validateApplicant, validateUpload, lookupRegistry, registrySettings, namesMatch, normalizeName, requiredKinds, buildContract, publicApplication } from "./applications.mjs";
 import { agentSettings, runAgent, sanitizeContext, MAX_TURNS_PER_CONVERSATION } from "./agent.mjs";
+import { CLIENT_EVENTS, EVENT_LABELS, STAGES, STAGE_LABELS, LOST_REASONS, CHANNELS, isValidVisitorId, refFromVisitor, normalizeRef, classifySource, stageHint, computeDashboard, demoDashboard, loadTargets, periodRange } from "./metrics.mjs";
 import { lookupPlate, validateSellInput, quoteSell, publicSell, newSellToken, PHOTO_KINDS, REQUIRED_PHOTOS, MEDIA_TYPES, MAX_VIDEO_BYTES, MAX_IMAGE_BYTES } from "./sell.mjs";
 import { RESERVATION_AMOUNT_CENTS, PAYPHONE_BOX_CSS, PAYPHONE_BOX_JS, paymentSettings, newClientTransactionId, validateReservationInput, buildPaymentBox, confirmWithPayphone, publicReservation, simulateCharge, simulatedAuthorizationCode, simulatedConfirmBody, interpretConfirmation, APPROVED, HOLD_HOURS, MAX_RESERVATIONS_PER_DAY, MAX_SIM_CHARGES, OTP_TTL_MINUTES, OTP_MAX_ATTEMPTS, OTP_RESEND_SECONDS, OTP_MAX_SENDS, normalizePhone, maskPhone, newOtpCode, hashOtp, isValidDocument, messagingSettings } from "./payments.mjs";
 
@@ -10,7 +11,22 @@ const json=(res,status,value)=>{res.statusCode=status;res.setHeader("content-typ
 const readBody=async req=>{if(req.body&&typeof req.body==="object")return req.body;const chunks=[];for await(const chunk of req)chunks.push(Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk));const text=Buffer.concat(chunks).toString("utf8");return text?JSON.parse(text):{};};
 const bearer=req=>(req.headers.authorization||"").replace(/^Bearer\s+/i,"");
 
+// Envoltura de medición: liga los leads del sitio al visitante (encabezado x-visitor) y registra
+// los eventos que ocurren en el servidor (reserva pagada, precalificación, cotización, etc.).
+const SERVER_EVENTS=[[/^\/api\/assistant\/chat$/,"assistant_message"],[/^\/api\/sell\/requests$/,"sell_quote"],[/^\/api\/applications$/,"application_start"],[/^\/api\/leads$/,"lead_form"]];
+function leadEvent(lead){const k=lead.kind,m=String(lead.message||"").toLowerCase();if(k==="reservation"&&m.includes("iniciada"))return "reservation_start";if(k==="reservation"&&m.includes("pagada"))return "reservation_paid";if(k==="prequalification")return "prequal_done";if(k==="contract"&&m.includes("firmado en línea"))return "contract_signed";if(k==="sell"&&m.includes("aceptada"))return "sell_accepted";if(k==="sell")return "sell_submitted";return null;}
 export async function handleApi(req,res,url=new URL(req.url,`http://${req.headers.host||"localhost"}`),store=getStore(),deps={}){
+  const now=deps.now||(()=>new Date());
+  const header=String(req.headers?.["x-visitor"]||"");const visitorId=isValidVisitorId(header)?header:null;
+  const sessionId=String(req.headers?.["x-session"]||"").replace(/[^A-Za-z0-9]/g,"").slice(0,24)||null;
+  const base=store,pending=[];
+  const tracked=Object.create(base);
+  tracked.createLead=async function(lead){const id=await base.createLead(lead);try{await base.upsertPipeline(lead,visitorId,now(),stageHint(lead.kind,lead.message));const kind=visitorId&&leadEvent(lead);if(kind)pending.push({kind,vehicleId:lead.vehicleId});}catch(error){console.error("Medición: no se pudo actualizar el embudo",error);}return id;};
+  await handleApiRoutes(req,res,url,tracked,deps);
+  if(visitorId&&req.method==="POST"&&res.statusCode<300){const match=SERVER_EVENTS.find(([re])=>re.test(url.pathname));if(match)pending.push({kind:match[1]});}
+  for(const e of pending){try{await base.recordEvent({visitorId,ref:refFromVisitor(visitorId),sessionId,kind:e.kind,path:url.pathname,vehicleId:Number(e.vehicleId)||undefined,at:now()});}catch(error){console.error("Medición: evento no registrado",error);}}
+}
+async function handleApiRoutes(req,res,url,store,deps){
   const settings=deps.settings||paymentSettings(),fetchImpl=deps.fetchImpl||fetch,now=deps.now||(()=>new Date()),messaging=deps.messaging||messagingSettings(),bureau=deps.bureau||bureauSettings(),registry=deps.registry||registrySettings(),asesorKey=deps.asesorKey!==undefined?deps.asesorKey:(process.env.ASESOR_KEY||""),agent=deps.agent||agentSettings();
   try{
     const path=url.pathname;
@@ -29,7 +45,9 @@ export async function handleApi(req,res,url=new URL(req.url,`http://${req.header
     if(path.startsWith("/api/sell"))return await sellRoutes(req,res,store,path,now);
     if(path==="/api/applications"&&req.method==="POST")return await createApplicationRoute(req,res,store);
     if(path.startsWith("/api/applications/"))return await applicationRoutes(req,res,store,path,registry,now);
-    if(path.startsWith("/api/asesor/"))return await asesorRoutes(req,res,store,path,asesorKey);
+    if(path==="/api/t"&&req.method==="POST")return await trackRoute(req,res,store,now);
+    if(path.startsWith("/api/analista/"))return await analistaRoutes(req,res,store,url,deps.analistaKey!==undefined?deps.analistaKey:(process.env.ANALISTA_KEY||""),now);
+    if(path.startsWith("/api/asesor/"))return await asesorRoutes(req,res,store,path,asesorKey,url,now);
     if(req.method==="POST"&&path==="/api/prequalification")return await prequalificationRoute(req,res,store,bureau,now);
     if(req.method==="POST"&&path==="/api/prequalification/reuse")return await prequalificationReuseRoute(req,res,store,bureau,now);
     if(req.method==="POST"&&path==="/api/reservations")return await createReservationRoute(req,res,store,settings,now,messaging);
@@ -285,12 +303,13 @@ async function contractFor(store,app,now){
 }
 
 // ---------------- Panel del asesor ----------------
-async function asesorRoutes(req,res,store,path,asesorKey){
+async function asesorRoutes(req,res,store,path,asesorKey,url,now=()=>new Date()){
   if(!asesorKey)return json(res,503,{error:"El panel del asesor no está configurado. Define ASESOR_KEY en las variables de entorno de Vercel.",code:"asesor_not_configured"});
   const provided=String(req.headers["x-asesor-key"]||"");
   if(provided.length!==asesorKey.length||provided!==asesorKey)return json(res,401,{error:"Clave de asesor incorrecta.",code:"asesor_unauthorized"});
   const parts=path.split("/");
   if(parts[3]==="sell")return await asesorSellRoutes(req,res,store,parts);
+  if(parts[3]==="clientes")return await asesorClientRoutes(req,res,store,parts,url,now);
   if(req.method==="GET"&&path==="/api/asesor/applications"){const rows=await store.listApplicationsForReview();return json(res,200,{items:rows.map(row=>({id:row.id,status:row.status,verification:row.verification_status,note:row.verification_note,applicant:row.applicant,registry:row.registry,vehicle:`${row.year} ${row.brand} ${row.model}`,updatedAt:row.updated_at}))});}
   const id=Number(parts[4]);const app=Number.isInteger(id)&&await store.getApplicationById(id);
   if(!app)return json(res,404,{error:"Expediente no encontrado"});
@@ -376,4 +395,52 @@ async function asesorSellRoutes(req,res,store,parts){
     if(data.action==="reject"){if(!note)return json(res,400,{error:"Indica el motivo."});const updated=await store.updateSellRequest(row.id,{status:"rejected",evaluator_note:note});return json(res,200,{item:publicSell(updated,await store.listSellMedia(row.id))});}
     return json(res,400,{error:"Acción no válida"});}
   return json(res,404,{error:"Ruta de API no encontrada"});
+}
+
+// ---------------- Medición: registro de eventos del navegador ----------------
+async function trackRoute(req,res,store,now){
+  const visitorId=String(req.headers["x-visitor"]||"");if(!isValidVisitorId(visitorId))return json(res,400,{error:"Visitante no válido"});
+  const data=await readBody(req);if(!CLIENT_EVENTS.includes(data.kind))return json(res,400,{error:"Evento no válido"});
+  const host=String(req.headers.host||"");const source=classifySource(data.source||{},host);
+  const extra={};if(data.data&&typeof data.data==="object")for(const [k,v] of Object.entries(data.data).slice(0,6))extra[String(k).slice(0,30)]=typeof v==="number"?v:String(v).slice(0,80);
+  await store.recordEvent({visitorId,ref:refFromVisitor(visitorId),sessionId:String(data.sessionId||"").replace(/[^A-Za-z0-9]/g,"").slice(0,24)||null,kind:data.kind,path:String(data.path||"").slice(0,200),vehicleId:Number.isInteger(data.vehicleId)?data.vehicleId:undefined,source,data:extra,at:now()});
+  res.statusCode=204;res.setHeader("cache-control","no-store");return res.end();
+}
+
+// ---------------- Panel del asesor: clientes del embudo comercial ----------------
+const publicClient=row=>({id:row.id,ref:row.ref,name:row.name,email:row.email,phone:row.phone,channel:row.channel,channelLabel:CHANNELS[row.channel]||(row.channel==="agencia"?"Agencia":row.channel),stage:row.stage,stageLabel:STAGE_LABELS[row.stage],history:row.history,kinds:row.kinds,advisor:row.advisor,saleAmount:row.sale_amount===null||row.sale_amount===undefined?null:Number(row.sale_amount),lostReason:row.lost_reason,note:row.note,vehicle:row.brand?`${row.year} ${row.brand} ${row.model}`:null,vehicleId:row.vehicle_id,createdAt:row.created_at,updatedAt:row.updated_at,contactedAt:row.contacted_at,soldAt:row.sold_at});
+async function asesorClientRoutes(req,res,store,parts,url,now){
+  if(req.method==="GET"&&parts.length===4)return json(res,200,{items:(await store.listPipeline({q:String(url.searchParams.get("q")||"").slice(0,60),stage:STAGES.includes(url.searchParams.get("stage"))?url.searchParams.get("stage"):""})).map(publicClient),stages:STAGES.map(id=>({id,label:STAGE_LABELS[id]})),lostReasons:LOST_REASONS});
+  if(req.method==="POST"&&parts.length===4){
+    // Registrar un cliente que escribió por WhatsApp con su código de referencia.
+    const data=await readBody(req),ref=normalizeRef(data.ref),phone=String(data.phone||"").replace(/[\s-]/g,"");
+    if(!String(data.name||"").trim())return json(res,400,{error:"Escribe el nombre del cliente."});
+    if(!/^(\+?593|0)9\d{8}$/.test(phone))return json(res,400,{error:"Escribe un celular válido (ej. 0991234567)."});
+    const visitor=ref?await store.getVisitorByRef(ref):null;if(data.ref&&!visitor)return json(res,404,{error:`No encontramos la referencia ${ref||data.ref}. Revisa el código del mensaje de WhatsApp.`});
+    let row=await store.upsertPipeline({kind:"whatsapp",name:String(data.name).trim().slice(0,120),phone,email:String(data.email||"").trim().slice(0,160)||null,manual:true,message:"Cliente registrado desde WhatsApp por el asesor"},visitor?.id||null,now());
+    if(data.advisor)row=await store.setPipelineStage(row.id,{stage:row.stage==="nuevo"?"contactado":row.stage,advisor:String(data.advisor).slice(0,60)},now());
+    return json(res,201,{item:publicClient({...row,...(await store.listPipeline({q:row.ref||row.phone})).find(r=>r.id===row.id)})});
+  }
+  const id=Number(parts[4]);const row=Number.isInteger(id)&&await store.getPipeline(id);if(!row)return json(res,404,{error:"Cliente no encontrado"});
+  if(req.method==="GET"&&parts.length===5){const full=(await store.listPipeline({})).find(r=>r.id===id)||row;const visitor=row.visitor_id?await store.getVisitor(row.visitor_id):null;const events=row.visitor_id?await store.listVisitorEvents(row.visitor_id):[];
+    return json(res,200,{item:publicClient(full),origin:visitor?{channel:visitor.channel,channelLabel:CHANNELS[visitor.channel],source:visitor.source,medium:visitor.medium,campaign:visitor.campaign,landing:visitor.landing,firstSeen:visitor.first_seen}:null,
+      journey:events.filter(e=>!(e.kind==="page_view"&&/^\/vehiculo\//.test(e.path||""))).map(e=>({kind:e.kind,label:EVENT_LABELS[e.kind]||e.kind,path:e.path,vehicle:e.brand?`${e.year} ${e.brand} ${e.model}`:null,at:e.created_at})),stages:STAGES.map(s=>({id:s,label:STAGE_LABELS[s]})),lostReasons:LOST_REASONS});}
+  if(req.method==="POST"&&parts[5]==="stage"){const data=await readBody(req);if(!STAGES.includes(data.stage))return json(res,400,{error:"Etapa no válida"});
+    const advisor=String(data.advisor||"").trim().slice(0,60);if(!advisor)return json(res,400,{error:"Escribe tu nombre de asesor para registrar el cambio."});
+    let amount=null;if(data.stage==="vendido"){amount=Number(data.amount);if(!Number.isFinite(amount)||amount<500)return json(res,400,{error:"Escribe el precio de venta (USD)."});}
+    const reason=data.stage==="perdido"?(LOST_REASONS.includes(data.reason)?data.reason:"Otro"):null;
+    const updated=await store.setPipelineStage(id,{stage:data.stage,advisor,amount,reason,note:String(data.note||"").slice(0,300)||null},now());
+    return json(res,200,{item:publicClient({...updated,...((await store.listPipeline({})).find(r=>r.id===id)||{})})});}
+  return json(res,404,{error:"Ruta no encontrada"});
+}
+
+// ---------------- Tablero del analista ----------------
+async function analistaRoutes(req,res,store,url,key,now){
+  if(!key)return json(res,503,{error:"El tablero del analista no está configurado. Define ANALISTA_KEY en las variables de entorno de Vercel.",code:"analista_not_configured"});
+  const provided=String(req.headers["x-analista-key"]||"");if(provided.length!==key.length||provided!==key)return json(res,401,{error:"Clave de analista incorrecta.",code:"analista_unauthorized"});
+  if(req.method==="GET"&&url.pathname==="/api/analista/dashboard"){
+    const {from,to,period}=periodRange(String(url.searchParams.get("period")||"mes"),now());const targets=loadTargets();
+    const item=url.searchParams.get("mode")==="demo"?demoDashboard({targets,from,to,now:now()}):computeDashboard(await store.metricsRaw(from,to),{targets,from,to,now:now()});
+    return json(res,200,{item:{...item,period}});}
+  return json(res,404,{error:"Ruta no encontrada"});
 }

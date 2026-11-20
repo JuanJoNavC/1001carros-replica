@@ -1,0 +1,44 @@
+{
+  "_nota": "Metas del Balanced Scorecard de 1001carros.com para el tablero del analista (/analista). Fuente: 'Indicadores del Balanced Scorecard y datos del embudo'. Se puede editar sin programar. Las metas con lista [año 1, año 2, año 3] cambian según 'anio_proyecto'. Los porcentajes van en decimales (0,35 = 35%).",
+  "anio_proyecto": 1,
+
+  "inversion_marketing_mensual": 35167,
+  "_inversion_marketing_mensual": "USD 422.000 de inversión en marketing en 2025 ÷ 12 meses [P]. Se usa para el costo por prospecto.",
+
+  "inversion_por_canal": {
+    "_nota": "Pauta mensual por canal en USD. Search (Google) ≈ 2.000 [S5 1:00:57]. El desglose por red social está SIN DEFINIR: se completa cuando la empresa lo entregue.",
+    "google_ads": 2000
+  },
+
+  "nps": { "actual": 84, "meta": 88, "_fuente": "[E1; P] y [BSC 2]" },
+
+  "pasos_compra": [
+    { "paso": "Ver el catálogo y las fichas", "en_linea": true },
+    { "paso": "Conversar con un asesor o el asistente", "en_linea": true },
+    { "paso": "Simular la cuota", "en_linea": true },
+    { "paso": "Precalificar el crédito", "en_linea": true },
+    { "paso": "Avaluar el carro usado", "en_linea": true },
+    { "paso": "Reservar el carro", "en_linea": true },
+    { "paso": "Subir documentos y firmar el contrato", "en_linea": true },
+    { "paso": "Prueba de manejo", "en_linea": false },
+    { "paso": "Pago final y aprobación del crédito", "en_linea": false },
+    { "paso": "Entrega y traspaso", "en_linea": false }
+  ],
+  "_pasos_compra": "Línea base 2 de 10 [BSC 1; S5 14:00]; meta 5 de 10 [BSC 2; MF]. Cambia 'en_linea' si la lista de 10 pasos del grupo es otra.",
+
+  "indicadores": {
+    "conversion_web": { "perspectiva": "Clientes", "nombre": "Conversión web", "formula": "Ventas ÷ visitas web", "meta": [0.0068, 0.0076, 0.008], "linea_base": 0.006, "umbral_valor": 0.0068, "unidad": "%", "direccion": "up", "fuente": "[MF]; mínimo para crear valor ≈ 0,68%" },
+    "ventas_web": { "perspectiva": "Financiera", "nombre": "Ventas adicionales atribuibles a la web (al mes)", "formula": "Ventas con origen web en el mes", "meta": [48, 96, 120], "linea_base": null, "unidad": "n", "direccion": "up", "fuente": "[MF]; hoy no se rastrea [S5 57:44]" },
+    "costo_prospecto": { "perspectiva": "Financiera", "nombre": "Costo de marketing por prospecto", "formula": "Inversión en marketing ÷ prospectos", "meta": 13.86, "linea_base": 13.86, "unidad": "usd", "direccion": "down", "fuente": "Meta: «menor que la actual» [BSC 2]; línea base USD 13,86 [P]" },
+    "conversacion_a_ticket": { "perspectiva": "Procesos internos", "nombre": "Conversaciones que pasan a ticket", "formula": "Tickets ÷ conversaciones iniciadas", "meta": 0.4, "linea_base": 0.2, "unidad": "%", "direccion": "up", "fuente": "[E1; S5 58:47]" },
+    "abandono_cedula": { "perspectiva": "Procesos internos", "nombre": "Abandono al pedir la cédula", "formula": "Abandonos al pedir la cédula ÷ veces que se pide", "meta": 0.35, "linea_base": 0.7, "unidad": "%", "direccion": "down", "fuente": "[E1]" },
+    "ventas_por_1000": { "perspectiva": "Procesos internos", "nombre": "Ventas por cada 1.000 conversaciones", "formula": "1.000 × % ticket × % cita agendada × % cita asistida × % venta", "meta": 10, "linea_base": 3.4, "unidad": "n1", "direccion": "up", "fuente": "[S5 58:47–1:00:57]" },
+    "ticket_a_cita": { "perspectiva": "Procesos internos", "nombre": "Ticket → cita agendada", "formula": "Citas agendadas ÷ tickets", "meta": 0.35, "linea_base": 0.47, "unidad": "%", "direccion": "up", "fuente": "[S5 58:47–59:49]. La meta (35%) es menor que el dato actual (47%): confirmar con la empresa" },
+    "cita_asistida": { "perspectiva": "Procesos internos", "nombre": "Cita agendada → cita asistida", "formula": "Citas asistidas ÷ citas agendadas", "meta": 0.6, "linea_base": 0.4, "unidad": "%", "direccion": "up", "fuente": "[S5 58:47–59:49]" },
+    "asistida_a_venta": { "perspectiva": "Procesos internos", "nombre": "Cita asistida → venta", "formula": "Ventas ÷ citas asistidas", "meta": 0.12, "linea_base": 0.09, "unidad": "%", "direccion": "up", "fuente": "[S5 59:49–1:00:57]" },
+    "reservas_a_venta": { "perspectiva": "Procesos internos", "nombre": "Reservas que terminan en venta", "formula": "Reservas vendidas ÷ reservas", "meta": 0.7, "linea_base": 0.7, "unidad": "%", "direccion": "up", "fuente": "[S1 24:57]; meta: mantener" },
+    "pasos_en_linea": { "perspectiva": "Procesos internos", "nombre": "Pasos de compra disponibles en línea", "formula": "Pasos que se pueden hacer en línea (de 10)", "meta": 5, "linea_base": 2, "unidad": "de10", "direccion": "up", "fuente": "[BSC 1; BSC 2; MF]" },
+    "tiempo_respuesta": { "perspectiva": "Procesos internos", "nombre": "Tiempo de respuesta del asesor", "formula": "Promedio entre el lead y el primer contacto", "meta": null, "linea_base": null, "unidad": "min", "direccion": "down", "fuente": "SIN DEFINIR: no se mencionó en las sesiones" },
+    "dias_a_venta": { "perspectiva": "Clientes", "nombre": "Días desde el lead hasta la venta", "formula": "Promedio de días entre el lead y la venta", "meta": null, "linea_base": 30, "unidad": "dias", "direccion": "down", "fuente": "Línea base ≈ 1 mes [S5 54:33]; meta SIN DEFINIR" }
+  }
+}

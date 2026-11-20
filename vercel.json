@@ -15,7 +15,7 @@
   ],
   "functions": {
     "api/index.mjs": {
-      "includeFiles": "{asistente,cotizador}/**",
+      "includeFiles": "{asistente,cotizador,medicion}/**",
       "maxDuration": 30
     }
   }

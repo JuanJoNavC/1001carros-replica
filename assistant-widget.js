@@ -120,6 +120,7 @@ function setOpen(open) {
   button.setAttribute("aria-expanded", String(open));
   button.setAttribute("aria-label", open ? "Cerrar asistente virtual" : "Abrir asistente virtual");
   if (open) {
+    window.M1001?.track("assistant_open");
     if (!session.messages.length) { session.messages.push({ role: "bot", text: ai.enabled ? AI_GREETING : GREETING, at: new Date().toISOString(), intent: "saludo" }); persist(); }
     render();
     input.focus();
@@ -164,7 +165,7 @@ async function sendAiReply(text) {
   let reply;
   try {
     const history = session.messages.slice(-16).map(m => ({ role: m.role === "bot" ? "assistant" : "user", text: m.text }));
-    const response = await fetch("/api/assistant/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: history, context: buildContext() }) });
+    const response = await fetch("/api/assistant/chat", { method: "POST", headers: { "content-type": "application/json", ...(window.M1001?.headers() || {}) }, body: JSON.stringify({ messages: history, context: buildContext() }) });
     const body = await response.json();
     if (response.status === 503 && body.code === "ai_disabled") { ai.enabled = false; typing.remove(); session.messages.pop(); updateHeader(); return sendReply(text); }
     reply = response.ok ? { text: body.text, cars: body.cars || [], actions: body.actions || [] } : { text: body.error || "No pude responder en este momento.", cars: [], actions: [] };
