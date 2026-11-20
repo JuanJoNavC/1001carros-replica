@@ -1420,3 +1420,4 @@ a.sticky-reserve { padding:0 18px; text-decoration:none; }
 .sim-card-form input,.sim-phone-form input { width:100%; min-width:0; box-sizing:border-box; }
 .sim-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
 .sim-box { max-width:100%; }
+.reserve-refund { margin:-6px 0 15px !important; padding:8px 10px; border-radius:7px; background:#e8f7ef; color:#16603d !important; font-size:12px !important; }
