@@ -110,3 +110,15 @@ El buró de crédito no se usa para reservar: queda en la precalificación, con 
 - **Motor de decisión:** capacidad de pago = 40% del ingreso − cuota de deudas actuales; tasas por perfil sin superar el techo legal de consumo (16,77%); resultados: precalificado, con más entrada, revisión de un asesor o no precalificado.
 - **Control del costo:** una persona se consulta en el buró una sola vez; el reporte queda vigente 30 días (`BURO_REPORT_DAYS`) y se reutiliza para precalificarla en otros carros (`POST /api/prequalification/reuse`), sin pedir la cédula de nuevo. Si escribe su cédula otra vez dentro de la vigencia, tampoco se consulta. Al vencer, la siguiente precalificación hace una consulta nueva. Cada registro indica si fue consulta nueva o reutilizada.
 - **Cédulas de prueba:** `1700000019` excelente, `1700000027` bueno, `1700000035` deudas altas, `1700000043` con mora, `1700000050` sin historial.
+
+## Documentos, verificación y contrato
+
+Después de reservar (o desde la precalificación), el cliente completa su expediente en `/documentos?vehiculo=ID`:
+
+1. **Documentos:** cédula (ambos lados), certificado de votación (o "No aplica" si está exento), planilla de servicios básicos y, según su situación laboral, roles de pago (dependiente) o estados de cuenta y RUC (independiente). Las fotos se comprimen en el navegador y se guardan en la tabla `application_files`.
+2. **Verificación:** los datos se comparan con el Registro Civil (simulado; `REGISTRO_PROVIDER` para conectar uno real) y con la cédula de la precalificación. El cliente confirma "Mis datos son correctos" o marca "Un dato está incorrecto o mal escrito", corrige y se verifica de nuevo; si aún no coincide, lo envía a un asesor.
+3. **Contrato y firma:** se genera el contrato con los datos verificados, la reserva y el financiamiento precalificado (con huella SHA-256). Se firma en línea (demostración, sin validez legal) o en la agencia; se puede imprimir o guardar en PDF.
+
+**Panel del asesor** (`/asesor`): requiere la variable `ASESOR_KEY`. Muestra los expedientes (primero los que esperan revisión), los documentos subidos y permite aprobar o corregir los datos, o pedir que el cliente vuelva a subir un documento.
+
+**Cédulas de prueba del Registro Civil simulado:** `1700000019` María José Pérez López, `1700000027` Carlos Andrés Mora Vera, `1700000035` Ana Lucía Torres Ruiz, `1700000043` Jorge Luis Cevallos Paz, `1700000050` Daniela Fernanda Ríos Vega. Para cualquier otra cédula válida, el registro simulado acepta el nombre escrito.
