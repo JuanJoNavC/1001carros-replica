@@ -45,7 +45,7 @@ test("herramientas: buscar, cuota, cotizar, acciones seguras",async()=>{
   assert.equal(quote.result.entrada_pct,25);
   assert.ok(quote.result.cuota_mensual>500);
   const tradein=await runTool("cotizar_mi_carro",{marca:"Toyota",modelo:"Corolla",anio:2018,kilometraje:80000},{store});
-  assert.ok(tradein.result.rango_desde<tradein.result.rango_hasta);
+  assert.ok(tradein.result.estimado_desde<tradein.result.estimado_hasta||tradein.result.evaluacion);
   const reserve=await runTool("abrir_reserva",{carro_id:1},{store});
   assert.equal(reserve.actions[0].href,"/reserva/1");
   const prequal=await runTool("abrir_precalificacion",{carro_id:2},{store});

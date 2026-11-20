@@ -40,7 +40,11 @@
   que se firma en línea o en la agencia.
 
 ## Vender o dejar tu carro en parte de pago
-- Se cotiza en línea con marca, modelo, año, kilometraje y estado. La oferta es un rango referencial válido por 5 días.
+- Se cotiza en línea en /vender: datos del carro, estado (choques, frenos, llantas, etc.), placa para consultar multas, matrícula y revisión técnica, 9 fotos y un video de 30 segundos del motor. Hay una guía para tomar las fotos.
+- El precio sigue la fórmula de la empresa: precio de nuevo, depreciación según la marca y los años, kilometraje, margen de 8 a 10% y las reparaciones, que se descuentan.
+- Las multas y la matrícula se descuentan de la oferta o el cliente las paga antes, como prefiera. El saldo de una prenda siempre se descuenta porque 1001Carros lo paga a la entidad.
+- Si el carro está chocado, tiene testigos encendidos, ruidos, muchos golpes o más de 9 años, un evaluador revisa las fotos y el video y da el precio, normalmente el mismo día hábil.
+- La oferta es válida por 3 días. El precio final se confirma en la inspección en la agencia (unos 45 minutos). Hay que llevar cédula, matrícula original y las 2 llaves.
 - 1001Carros puede recibir tu carro como parte de pago o comprarlo y pagarte.
 
 ## Test drive y visitas

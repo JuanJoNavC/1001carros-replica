@@ -11,7 +11,7 @@
 
 import { readFileSync } from "node:fs";
 import { loanQuoteServer } from "./agent-tools-math.mjs";
-import { createOffer } from "./tradein.mjs";
+import { quoteSell } from "./sell.mjs";
 import { WHATSAPP_NUMBER } from "./assistant.mjs";
 import { RESERVATION_AMOUNT_USD } from "./payments.mjs";
 
@@ -123,11 +123,13 @@ export async function runTool(name, input = {}, { store, context = {}, now = new
       return out;
     }
     case "cotizar_mi_carro": {
-      const reference = await store.listVehicles({});
-      const offer = createOffer({ brand: input.marca, model: input.modelo, year: input.anio, mileage: input.kilometraje, condition: input.estado || "bueno" }, { now, reference });
-      if (!offer) { out.result = { error: "Revisa marca, modelo, año y kilometraje." }; return out; }
-      out.result = { rango_desde: offer.low, rango_hasta: offer.high, valido_hasta: offer.validUntil, nota: "Rango referencial; el valor final se confirma con la inspección en la agencia." };
-      out.actions.push({ type: "link", label: "Cotizar mi carro en detalle", href: "/vender" });
+      const catalog = await store.listVehicles({});
+      const year = Number(input.anio), mileage = Number(input.kilometraje);
+      if (!input.marca || !input.modelo || !Number.isInteger(year) || !Number.isFinite(mileage)) { out.result = { error: "Necesito marca, modelo, año y kilometraje." }; return out; }
+      const condition = { crash: "ninguno", tires: input.estado === "regular" ? "medias" : "buenas", acWorks: true, keys: 2, dentedPanels: input.estado === "regular" ? 1 : 0, repaintedPanels: 0 };
+      const quote = quoteSell({ vehicle: { brand: input.marca, model: input.modelo, year, mileage }, condition, legal: { multas: 0, matricula_al_dia: true, revision_tecnica: "aprobada", prenda_saldo: 0, titular_coincide: true } }, catalog, { now, hasPhotos: false });
+      out.actions.push({ type: "link", label: "Cotizar mi carro con fotos", href: "/vender" });
+      out.result = quote.offer ? { estimado_desde: quote.offer.low, estimado_hasta: quote.offer.high, nota: "Estimado preliminar sin fotos, suponiendo que no tiene choques ni valores pendientes. Para la oferta en línea el cliente completa el cotizador con el estado, la placa (multas y matrícula), 9 fotos y un video del motor." } : { evaluacion: true, motivos: quote.reasons, nota: "Este carro necesita la revisión de un evaluador: el cliente sube fotos y video en el cotizador y el evaluador le da el precio." };
       return out;
     }
     case "estado_de_mi_tramite": {

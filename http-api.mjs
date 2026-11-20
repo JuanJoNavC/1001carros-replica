@@ -3,6 +3,7 @@ import { getStore, hashPassword, verifyPassword } from "./db.mjs";
 import { CONSENT_VERSION, reportExpiresAt, bureauSettings, queryBureau, decideCredit, validatePrequalInput, publicReport, hashCedula, maskCedula, newFolio } from "./bureau.mjs";
 import { newApplicationToken, validateApplicant, validateUpload, lookupRegistry, registrySettings, namesMatch, normalizeName, requiredKinds, buildContract, publicApplication } from "./applications.mjs";
 import { agentSettings, runAgent, sanitizeContext, MAX_TURNS_PER_CONVERSATION } from "./agent.mjs";
+import { lookupPlate, validateSellInput, quoteSell, publicSell, newSellToken, PHOTO_KINDS, REQUIRED_PHOTOS, MEDIA_TYPES, MAX_VIDEO_BYTES, MAX_IMAGE_BYTES } from "./sell.mjs";
 import { RESERVATION_AMOUNT_CENTS, PAYPHONE_BOX_CSS, PAYPHONE_BOX_JS, paymentSettings, newClientTransactionId, validateReservationInput, buildPaymentBox, confirmWithPayphone, publicReservation, simulateCharge, simulatedAuthorizationCode, simulatedConfirmBody, interpretConfirmation, APPROVED, HOLD_HOURS, MAX_RESERVATIONS_PER_DAY, MAX_SIM_CHARGES, OTP_TTL_MINUTES, OTP_MAX_ATTEMPTS, OTP_RESEND_SECONDS, OTP_MAX_SENDS, normalizePhone, maskPhone, newOtpCode, hashOtp, isValidDocument, messagingSettings } from "./payments.mjs";
 
 const json=(res,status,value)=>{res.statusCode=status;res.setHeader("content-type","application/json; charset=utf-8");res.setHeader("cache-control","no-store");res.end(JSON.stringify(value));};
@@ -25,6 +26,7 @@ export async function handleApi(req,res,url=new URL(req.url,`http://${req.header
     if(/^\/api\/favorites\/\d+$/.test(path)&&["POST","DELETE"].includes(req.method)){const user=await store.sessionUser(bearer(req));if(!user)return json(res,401,{error:"Inicia sesión"});const vehicleId=Number(path.split("/").pop());if(req.method==="POST")await store.saveFavorite(user.id,vehicleId);else await store.deleteFavorite(user.id,vehicleId);return json(res,req.method==="POST"?201:200,{saved:req.method==="POST"});}
     if(path==="/api/assistant/status"&&req.method==="GET")return json(res,200,{ai:agent.enabled});
     if(path==="/api/assistant/chat"&&req.method==="POST")return await assistantChatRoute(req,res,store,agent,deps.fetchImpl||fetch,now);
+    if(path.startsWith("/api/sell"))return await sellRoutes(req,res,store,path,now);
     if(path==="/api/applications"&&req.method==="POST")return await createApplicationRoute(req,res,store);
     if(path.startsWith("/api/applications/"))return await applicationRoutes(req,res,store,path,registry,now);
     if(path.startsWith("/api/asesor/"))return await asesorRoutes(req,res,store,path,asesorKey);
@@ -288,6 +290,7 @@ async function asesorRoutes(req,res,store,path,asesorKey){
   const provided=String(req.headers["x-asesor-key"]||"");
   if(provided.length!==asesorKey.length||provided!==asesorKey)return json(res,401,{error:"Clave de asesor incorrecta.",code:"asesor_unauthorized"});
   const parts=path.split("/");
+  if(parts[3]==="sell")return await asesorSellRoutes(req,res,store,parts);
   if(req.method==="GET"&&path==="/api/asesor/applications"){const rows=await store.listApplicationsForReview();return json(res,200,{items:rows.map(row=>({id:row.id,status:row.status,verification:row.verification_status,note:row.verification_note,applicant:row.applicant,registry:row.registry,vehicle:`${row.year} ${row.brand} ${row.model}`,updatedAt:row.updated_at}))});}
   const id=Number(parts[4]);const app=Number.isInteger(id)&&await store.getApplicationById(id);
   if(!app)return json(res,404,{error:"Expediente no encontrado"});
@@ -317,4 +320,60 @@ async function assistantChatRoute(req,res,store,agent,fetchImpl,now){
   try{const reply=await runAgent({messages,context:sanitizeContext(data.context||{}),store,settings:agent,fetchImpl,now:current});
     return json(res,200,{text:reply.text,cars:reply.cars,actions:reply.actions});}
   catch(error){console.error("Assistant error",error);return json(res,502,{error:"No pude responder en este momento. Inténtalo de nuevo o habla con un asesor.",code:"ai_error"});}
+}
+
+// ---------------- Vender mi carro (cotizador) ----------------
+async function sellView(store,row){return publicSell(row,await store.listSellMedia(row.id));}
+async function sellRoutes(req,res,store,path,now){
+  const parts=path.split("/");
+  if(req.method==="POST"&&path==="/api/sell/lookup"){const data=await readBody(req),result=lookupPlate(data.plate,now());return result.error?json(res,400,{error:result.error}):json(res,200,{item:result});}
+  if(req.method==="POST"&&path==="/api/sell/requests"){const check=validateSellInput(await readBody(req),now());if(check.error)return json(res,400,{error:check.error});
+    const quote=quoteSell(check,await store.listVehicles({}),{now:now(),hasPhotos:false});
+    const row=await store.createSellRequest({token:newSellToken(),status:"draft",...check,quote});
+    return json(res,201,{item:await sellView(store,row)});}
+  const token=parts[4],action=parts[5]||"",row=token&&await store.getSellRequest(token);
+  if(!row)return json(res,404,{error:"No encontramos tu cotización."});
+  if(req.method==="GET"&&!action)return json(res,200,{item:await sellView(store,row)});
+  const editable=["draft","more_photos"].includes(row.status);
+  if(req.method==="PUT"&&!action){if(row.status!=="draft")return json(res,409,{error:"Esta cotización ya fue enviada."});const check=validateSellInput(await readBody(req),now());if(check.error)return json(res,400,{error:check.error});const updated=await store.updateSellRequest(row.id,{...check,quote:quoteSell(check,await store.listVehicles({}),{now:now(),hasPhotos:false})});return json(res,200,{item:await sellView(store,updated)});}
+  if(req.method==="POST"&&action==="media"){if(!editable)return json(res,409,{error:"Ya no se pueden cambiar las fotos."});
+    const data=await readBody(req),kind=String(data.kind||""),type=String(data.type||"");
+    if(kind!=="video"&&!PHOTO_KINDS[kind])return json(res,400,{error:"Foto no reconocida."});
+    if(!MEDIA_TYPES.includes(type)||(kind==="video")!==type.startsWith("video/"))return json(res,400,{error:"Formato no admitido."});
+    const chunkIndex=Number(data.chunkIndex||0),chunkCount=Number(data.chunkCount||1),base64=String(data.data||"").replace(/^data:[^,]+,/,"");
+    if(!Number.isInteger(chunkIndex)||!Number.isInteger(chunkCount)||chunkCount<1||chunkCount>6||chunkIndex<0||chunkIndex>=chunkCount)return json(res,400,{error:"Archivo incompleto."});
+    if(!/^[A-Za-z0-9+/=]+$/.test(base64))return json(res,400,{error:"No pudimos leer el archivo."});
+    const size=Math.floor(base64.length*3/4);if(kind!=="video"&&size>MAX_IMAGE_BYTES)return json(res,400,{error:"La foto supera 2,5 MB."});if(kind==="video"&&size*chunkCount>MAX_VIDEO_BYTES*1.1)return json(res,400,{error:"El video es muy pesado. Graba máximo 30 segundos."});
+    await store.addSellMedia(row.id,{kind,type,uploadId:String(data.uploadId||"u").slice(0,40),chunkIndex,chunkCount,data:base64});
+    return json(res,201,{item:await sellView(store,row)});}
+  if(req.method==="DELETE"&&action==="media"&&parts[6]){if(!editable)return json(res,409,{error:"Ya no se pueden cambiar las fotos."});await store.deleteSellMedia(row.id,parts[6]);return json(res,200,{item:await sellView(store,row)});}
+  if(req.method==="POST"&&action==="submit"){if(!editable)return json(res,409,{error:"Esta cotización ya fue enviada."});
+    const media=await store.listSellMedia(row.id),kinds=new Set(media.map(item=>item.kind));
+    const missing=REQUIRED_PHOTOS.filter(kind=>!kinds.has(kind));if(missing.length)return json(res,400,{error:`Faltan ${missing.length} fotos: ${missing.map(kind=>PHOTO_KINDS[kind]).join(", ")}.`});
+    const quote=quoteSell(row,await store.listVehicles({}),{now:now(),hasPhotos:true});
+    const status=row.status==="more_photos"||quote.status==="evaluation"?"evaluation":"offer";
+    const updated=await store.updateSellRequest(row.id,{quote,status});
+    await store.createLead({kind:"sell",name:row.contact.name,email:row.contact.email,phone:row.contact.phone,plate:row.vehicle.plate,message:`Tasación ${row.id}: ${status==="offer"?`oferta en línea $${quote.offer.low}–$${quote.offer.high}`:`pasa a evaluador (${quote.reasons.join(" ")})`}${row.contact.tradeIn?" · quiere usarlo como parte de pago":""}`});
+    return json(res,200,{item:await sellView(store,updated)});}
+  if(req.method==="POST"&&action==="accept"){if(!["offer","evaluated"].includes(row.status))return json(res,409,{error:"Aún no hay una oferta para aceptar."});
+    const data=await readBody(req),agency=await store.getAgency(Number(data.agencyId)),visitAt=new Date(data.visitAt);
+    if(!agency)return json(res,400,{error:"Elige la agencia para la inspección."});
+    if(Number.isNaN(visitAt.getTime())||visitAt.getTime()<now().getTime()+3600000)return json(res,400,{error:"Elige una fecha y hora futuras para la inspección."});
+    const updated=await store.updateSellRequest(row.id,{status:"accepted",accepted_at:now(),inspection:{agencyId:agency.id,agency:`${agency.name}, ${agency.address}`,visitAt:visitAt.toISOString()}});
+    await store.createLead({kind:"sell",name:row.contact.name,email:row.contact.email,phone:row.contact.phone,plate:row.vehicle.plate,message:`Tasación ${row.id}: oferta aceptada; inspección en ${agency.name} el ${visitAt.toISOString()}`});
+    return json(res,200,{item:await sellView(store,updated)});}
+  return json(res,404,{error:"Ruta de API no encontrada"});
+}
+
+async function asesorSellRoutes(req,res,store,parts){
+  if(req.method==="GET"&&parts.length===4){const rows=await store.listSellRequests();return json(res,200,{items:rows.map(row=>({id:row.id,status:row.status,vehicle:`${row.vehicle.year} ${row.vehicle.brand} ${row.vehicle.model}`,plate:row.vehicle.plate,name:row.contact.name,offer:row.final_offer||row.quote?.offer||null,reasons:row.quote?.reasons||[],updatedAt:row.updated_at}))});}
+  const row=await store.getSellRequestById(Number(parts[4]));if(!row)return json(res,404,{error:"Tasación no encontrada"});
+  if(req.method==="GET"&&parts.length===5){const media=await store.listSellMedia(row.id,true);return json(res,200,{item:{...publicSell(row,media),contact:row.contact},photos:media.filter(item=>item.kind!=="video").map(item=>({kind:item.kind,label:PHOTO_KINDS[item.kind],dataUrl:`data:${item.type};base64,${item.data.join("")}`})),hasVideo:media.some(item=>item.kind==="video")});}
+  if(req.method==="GET"&&parts[5]==="video"){const video=(await store.listSellMedia(row.id,true)).find(item=>item.kind==="video");if(!video)return json(res,404,{error:"Sin video"});const buffer=Buffer.concat(video.data.map(chunk=>Buffer.from(chunk,"base64")));res.statusCode=200;res.setHeader("content-type",video.type);res.setHeader("cache-control","no-store");return res.end(buffer);}
+  if(req.method==="POST"&&parts[5]==="decision"){const data=await readBody(req),note=String(data.note||"").slice(0,600);
+    if(data.action==="offer"){const amount=Math.round(Number(data.amount));if(!(amount>=500))return json(res,400,{error:"Indica el valor de la oferta (mínimo $500)."});const updated=await store.updateSellRequest(row.id,{status:"evaluated",final_offer:{amount,note,at:new Date().toISOString()},evaluator_note:note||null});return json(res,200,{item:publicSell(updated,await store.listSellMedia(row.id))});}
+    if(data.action==="more_photos"){if(!note)return json(res,400,{error:"Indica qué fotos o videos necesitas."});const updated=await store.updateSellRequest(row.id,{status:"more_photos",evaluator_note:note});return json(res,200,{item:publicSell(updated,await store.listSellMedia(row.id))});}
+    if(data.action==="reject"){if(!note)return json(res,400,{error:"Indica el motivo."});const updated=await store.updateSellRequest(row.id,{status:"rejected",evaluator_note:note});return json(res,200,{item:publicSell(updated,await store.listSellMedia(row.id))});}
+    return json(res,400,{error:"Acción no válida"});}
+  return json(res,404,{error:"Ruta de API no encontrada"});
 }

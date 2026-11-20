@@ -131,3 +131,13 @@ El chat del sitio usa un agente de IA (Claude, de Anthropic) cuando existe la va
 - **Herramientas del agente** (`agent.mjs`): buscar carros, ver un carro, calcular cuota, listar agencias, cotizar el carro del cliente, estado del trámite, y botones para precalificarse, reservar, agendar test drive, subir documentos o hablar con un asesor por WhatsApp.
 - **Límites en el código:** el agente no paga, no firma ni acepta la autorización del buró; solo abre las pantallas seguras. Las cédulas y números de tarjeta se ocultan antes de enviar el mensaje al modelo. Máximo 20 mensajes por minuto por visitante y 40 por conversación.
 - **Modelo:** `claude-haiku-5-5` por defecto (configurable con `ASISTENTE_MODEL`).
+
+## Vender mi carro (cotizador con fotos, video y evaluador)
+
+`/vender` es un cotizador en 6 pasos: datos del carro (con consulta de placa), estado, papeles y valores pendientes, datos de contacto, 9 fotos obligatorias + video del motor, y oferta.
+
+- **Fórmula**: «Pricing 2.0» de 1001Carros, en `cotizador/politica.json` (editable sin programar): precio de nuevo sin IVA × (1 − depreciación del grupo de marca por años) × ajuste por kilometraje (promedio 18.496 km/año) × ponderación por placa − margen (9%) − reparaciones − valores pendientes. Si un modelo no tiene precio de nuevo en `precios_nuevos`, se estima con el catálogo.
+- **Pasa al evaluador**: choque fuerte/estructural, airbags, testigos o ruidos de motor, más de 2 piezas con golpes, más de 9 años, más de 250.000 km, revisión técnica no aprobada, carro a nombre de otra persona, prenda alta o modelo sin referencia.
+- **Panel**: `/asesor` → pestaña «Tasaciones de carros» con fotos, video, cálculo y el precio aprobado.
+- **Placa (simulada)**: PBA1234 sin pendientes, PCD5678 multas y matrícula, GYE2020 con prenda, ABC1111 revisión no aprobada. Conectar ANT/AMT/SRI con `PLACA_PROVIDER`.
+- Supuestos por confirmar con la empresa: ajuste por km (1% por cada 10% de diferencia, tope 8%), ponderación por placa (1,00), costos de reparación salvo frenos (USD 340).
