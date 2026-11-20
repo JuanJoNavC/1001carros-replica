@@ -221,3 +221,26 @@ test("tras pagar: cédula opcional y visita agendada evitan el vencimiento",asyn
   assert.equal((await store.getReservation(tx)).status,"paid");
   await store.close();
 });
+
+test("la reserva acepta abonar más que el mínimo, con tope", async () => {
+  const { reservationMaxUsd, RESERVATION_AMOUNT_USD } = await import("./payments.mjs");
+  const base = { vehicleId: 1, name: "Ana Torres", email: "ana@example.com", phone: "0991234567" };
+  assert.equal(validateReservationInput(base).value.amountUsd, RESERVATION_AMOUNT_USD);
+  assert.equal(validateReservationInput({ ...base, amount: 1500 }).value.amountUsd, 1500);
+  assert.deepEqual(validateReservationInput({ ...base, amount: 150 }).errors, ["amount"]);
+  assert.deepEqual(validateReservationInput({ ...base, amount: 250.5 }).errors, ["amount"]);
+  assert.equal(reservationMaxUsd(46900), 5000);
+  assert.equal(reservationMaxUsd(12800), 3800);
+  assert.equal(reservationMaxUsd(500), 200);
+});
+
+test("reserva con un abono mayor: se cobra el monto elegido y respeta el tope del carro", async () => {
+  const store = makeStore();
+  const tooMuch = await call(store, "POST", "/api/reservations", { vehicleId: 1, ...customer, amount: 9000 }, DEMO);
+  assert.equal(tooMuch.status, 400); assert.match(tooMuch.body.error, /hasta USD/);
+  const tooLittle = await call(store, "POST", "/api/reservations", { vehicleId: 1, ...customer, amount: 100 }, DEMO);
+  assert.equal(tooLittle.status, 400);
+  const created = await call(store, "POST", "/api/reservations", { vehicleId: 1, ...customer, amount: 1500 }, DEMO);
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  assert.equal(created.body.item.amount, 1500);
+});

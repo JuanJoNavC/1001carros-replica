@@ -16,14 +16,14 @@ export const normalizeRef = ref => {
 };
 
 // Eventos que acepta el registro desde el navegador (los demás se registran en el servidor).
-export const CLIENT_EVENTS = ["page_view", "vehicle_view", "calc_use", "whatsapp_click", "prequal_start", "assistant_open", "guide_open"];
+export const CLIENT_EVENTS = ["page_view", "vehicle_view", "calc_use", "whatsapp_click", "prequal_start", "assistant_open", "guide_open", "view_360"];
 export const EVENT_LABELS = {
   page_view: "Visitó una página", vehicle_view: "Vio la ficha de un carro", calc_use: "Usó la calculadora de cuotas",
   whatsapp_click: "Abrió WhatsApp", prequal_start: "Abrió la precalificación (pide cédula)", prequal_done: "Se precalificó con el buró",
   assistant_open: "Abrió el asistente", assistant_message: "Conversó con el asistente IA", reservation_start: "Inició una reserva",
   reservation_paid: "Pagó la reserva", application_start: "Empezó a subir documentos", contract_signed: "Firmó el contrato en línea",
   sell_quote: "Cotizó su carro", sell_submitted: "Envió fotos de su carro", sell_accepted: "Aceptó la oferta por su carro",
-  lead_form: "Dejó sus datos en un formulario", guide_open: "Abrió la guía de fotos"
+  lead_form: "Dejó sus datos en un formulario", test_drive_scheduled: "Agendó un test drive", guide_open: "Abrió la guía de fotos", view_360: "Giró el carro en la vista 360°"
 };
 
 export const CHANNELS = {
@@ -64,7 +64,7 @@ export function maxStage(row) {
 export function stageHint(kind, message = "") {
   const m = String(message).toLowerCase();
   if (kind === "reservation" && m.includes("pagada")) return "reservado";
-  if ((kind === "reservation" && m.includes("visita agendada")) || (kind === "sell" && m.includes("inspección"))) return "cita_agendada";
+  if (kind === "test_drive" || (kind === "reservation" && m.includes("visita agendada")) || (kind === "sell" && m.includes("inspección"))) return "cita_agendada";
   return null;
 }
 export const TOOL_OF_KIND = { reservation: "reserva", prequalification: "precalificacion", sell: "cotizador", contract: "documentos", verification_review: "documentos", assistant: "asistente", whatsapp: "whatsapp" };
@@ -176,7 +176,7 @@ export function computeDashboard(raw, { targets = loadTargets(), from, to, now =
     return { channel: ch, label: CHANNELS[ch], sessions: s, leads, sales: ventas, conversion: pct(ventas, s), costPerLead: spend && leads ? spend / leads : null };
   }).filter(c => c.sessions || c.leads || c.sales);
 
-  const toolNames = { reserva: "Reserva en línea", precalificacion: "Precalificación con buró", asistente: "Asistente IA", cotizador: "Cotizador de tu carro", documentos: "Documentos y contrato", calculadora: "Calculadora de cuotas", whatsapp: "WhatsApp" };
+  const toolNames = { test_drive: "Agenda de test drive", reserva: "Reserva en línea", precalificacion: "Precalificación con buró", asistente: "Asistente IA", cotizador: "Cotizador de tu carro", documentos: "Documentos y contrato", calculadora: "Calculadora de cuotas", whatsapp: "WhatsApp" };
   const tools = Object.keys(toolNames).map(tool => {
     const users = created.filter(p => (p.tools || []).includes(tool));
     return { tool, label: toolNames[tool], customers: users.length, sales: users.filter(p => p.stage === "vendido").length, conversion: pct(users.filter(p => p.stage === "vendido").length, users.length) };
@@ -264,7 +264,7 @@ export function demoDashboard({ targets = loadTargets(), from, to, now = new Dat
     const spend = Number((targets.inversion_por_canal || {})[ch] || 0) * f;
     return { channel: ch, label: CHANNELS[ch], sessions: s, leads, sales, conversion: s ? sales / s : null, costPerLead: spend && leads ? spend / leads : null };
   });
-  real.tools = [["reserva", "Reserva en línea", 0.09, 0.62], ["precalificacion", "Precalificación con buró", 0.31, 0.16], ["asistente", "Asistente IA", 0.58, 0.09], ["cotizador", "Cotizador de tu carro", 0.12, 0.14], ["documentos", "Documentos y contrato", 0.07, 0.71], ["calculadora", "Calculadora de cuotas", 0.44, 0.08], ["whatsapp", "WhatsApp", 0.47, 0.1]]
+  real.tools = [["test_drive", "Agenda de test drive", 0.36, 0.17], ["reserva", "Reserva en línea", 0.09, 0.62], ["precalificacion", "Precalificación con buró", 0.31, 0.16], ["asistente", "Asistente IA", 0.58, 0.09], ["cotizador", "Cotizador de tu carro", 0.12, 0.14], ["documentos", "Documentos y contrato", 0.07, 0.71], ["calculadora", "Calculadora de cuotas", 0.44, 0.08], ["whatsapp", "WhatsApp", 0.47, 0.1]]
     .map(([tool, label, share, cr]) => { const c = Math.round(tickets * share), s = Math.round(c * jitter(cr, 0.1)); return { tool, label, customers: c, sales: s, conversion: c ? s / c : null }; });
   real.speed = { avgResponseMin: real.kpis.find(k => k.id === "tiempo_respuesta").value, avgDaysToSale: real.kpis.find(k => k.id === "dias_a_venta").value, contacted: Math.round(tickets * 0.93) };
   const names = ["Andrea Salazar", "Diego Jaramillo", "María Fernanda León", "Carlos Vega", "Gabriela Ortiz", "Pablo Andrade"];

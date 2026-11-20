@@ -4,8 +4,9 @@ import { CONSENT_VERSION, reportExpiresAt, bureauSettings, queryBureau, decideCr
 import { newApplicationToken, validateApplicant, validateUpload, lookupRegistry, registrySettings, namesMatch, normalizeName, requiredKinds, buildContract, publicApplication } from "./applications.mjs";
 import { agentSettings, runAgent, sanitizeContext, MAX_TURNS_PER_CONVERSATION } from "./agent.mjs";
 import { CLIENT_EVENTS, EVENT_LABELS, STAGES, STAGE_LABELS, LOST_REASONS, CHANNELS, isValidVisitorId, refFromVisitor, normalizeRef, classifySource, stageHint, computeDashboard, demoDashboard, loadTargets, periodRange } from "./metrics.mjs";
+import { validateTestDrive, isValidSlot, needsTransfer, formatVisit } from "./testdrive.mjs";
 import { lookupPlate, validateSellInput, quoteSell, publicSell, newSellToken, PHOTO_KINDS, REQUIRED_PHOTOS, MEDIA_TYPES, MAX_VIDEO_BYTES, MAX_IMAGE_BYTES } from "./sell.mjs";
-import { RESERVATION_AMOUNT_CENTS, PAYPHONE_BOX_CSS, PAYPHONE_BOX_JS, paymentSettings, newClientTransactionId, validateReservationInput, buildPaymentBox, confirmWithPayphone, publicReservation, simulateCharge, simulatedAuthorizationCode, simulatedConfirmBody, interpretConfirmation, APPROVED, HOLD_HOURS, MAX_RESERVATIONS_PER_DAY, MAX_SIM_CHARGES, OTP_TTL_MINUTES, OTP_MAX_ATTEMPTS, OTP_RESEND_SECONDS, OTP_MAX_SENDS, normalizePhone, maskPhone, newOtpCode, hashOtp, isValidDocument, messagingSettings } from "./payments.mjs";
+import { reservationMaxUsd, RESERVATION_AMOUNT_CENTS, PAYPHONE_BOX_CSS, PAYPHONE_BOX_JS, paymentSettings, newClientTransactionId, validateReservationInput, buildPaymentBox, confirmWithPayphone, publicReservation, simulateCharge, simulatedAuthorizationCode, simulatedConfirmBody, interpretConfirmation, APPROVED, HOLD_HOURS, MAX_RESERVATIONS_PER_DAY, MAX_SIM_CHARGES, OTP_TTL_MINUTES, OTP_MAX_ATTEMPTS, OTP_RESEND_SECONDS, OTP_MAX_SENDS, normalizePhone, maskPhone, newOtpCode, hashOtp, isValidDocument, messagingSettings } from "./payments.mjs";
 
 const json=(res,status,value)=>{res.statusCode=status;res.setHeader("content-type","application/json; charset=utf-8");res.setHeader("cache-control","no-store");res.end(JSON.stringify(value));};
 const readBody=async req=>{if(req.body&&typeof req.body==="object")return req.body;const chunks=[];for await(const chunk of req)chunks.push(Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk));const text=Buffer.concat(chunks).toString("utf8");return text?JSON.parse(text):{};};
@@ -14,7 +15,7 @@ const bearer=req=>(req.headers.authorization||"").replace(/^Bearer\s+/i,"");
 // Envoltura de medición: liga los leads del sitio al visitante (encabezado x-visitor) y registra
 // los eventos que ocurren en el servidor (reserva pagada, precalificación, cotización, etc.).
 const SERVER_EVENTS=[[/^\/api\/assistant\/chat$/,"assistant_message"],[/^\/api\/sell\/requests$/,"sell_quote"],[/^\/api\/applications$/,"application_start"],[/^\/api\/leads$/,"lead_form"]];
-function leadEvent(lead){const k=lead.kind,m=String(lead.message||"").toLowerCase();if(k==="reservation"&&m.includes("iniciada"))return "reservation_start";if(k==="reservation"&&m.includes("pagada"))return "reservation_paid";if(k==="prequalification")return "prequal_done";if(k==="contract"&&m.includes("firmado en línea"))return "contract_signed";if(k==="sell"&&m.includes("aceptada"))return "sell_accepted";if(k==="sell")return "sell_submitted";return null;}
+function leadEvent(lead){const k=lead.kind,m=String(lead.message||"").toLowerCase();if(k==="test_drive")return "test_drive_scheduled";if(k==="reservation"&&m.includes("iniciada"))return "reservation_start";if(k==="reservation"&&m.includes("pagada"))return "reservation_paid";if(k==="prequalification")return "prequal_done";if(k==="contract"&&m.includes("firmado en línea"))return "contract_signed";if(k==="sell"&&m.includes("aceptada"))return "sell_accepted";if(k==="sell")return "sell_submitted";return null;}
 export async function handleApi(req,res,url=new URL(req.url,`http://${req.headers.host||"localhost"}`),store=getStore(),deps={}){
   const now=deps.now||(()=>new Date());
   const header=String(req.headers?.["x-visitor"]||"");const visitorId=isValidVisitorId(header)?header:null;
@@ -45,6 +46,8 @@ async function handleApiRoutes(req,res,url,store,deps){
     if(path.startsWith("/api/sell"))return await sellRoutes(req,res,store,path,now);
     if(path==="/api/applications"&&req.method==="POST")return await createApplicationRoute(req,res,store);
     if(path.startsWith("/api/applications/"))return await applicationRoutes(req,res,store,path,registry,now);
+    if(path==="/api/test-drives/slots"&&req.method==="GET"){const vehicleId=Number(url.searchParams.get("vehicleId"));if(!Number.isInteger(vehicleId))return json(res,400,{error:"Vehículo no válido"});return json(res,200,{taken:await store.takenTestDriveSlots(vehicleId,now())});}
+    if(path==="/api/test-drives"&&req.method==="POST")return await createTestDriveRoute(req,res,store,now);
     if(path==="/api/t"&&req.method==="POST")return await trackRoute(req,res,store,now);
     if(path.startsWith("/api/analista/"))return await analistaRoutes(req,res,store,url,deps.analistaKey!==undefined?deps.analistaKey:(process.env.ANALISTA_KEY||""),now);
     if(path.startsWith("/api/asesor/"))return await asesorRoutes(req,res,store,path,asesorKey,url,now);
@@ -61,7 +64,7 @@ async function handleApiRoutes(req,res,url,store,deps){
   }catch(error){console.error("API error",error);return json(res,500,{error:"Error interno",detail:process.env.NODE_ENV==="development"?error.message:undefined});}
 }
 
-const FIELD_ERRORS={vehicleId:"Vehículo no válido",agencyId:"Agencia no válida",name:"Escribe tu nombre completo",email:"Escribe un correo válido",phone:"Escribe un celular válido (ej. 0991234567)",documentId:"Revisa tu cédula o RUC"};
+const FIELD_ERRORS={vehicleId:"Vehículo no válido",agencyId:"Agencia no válida",name:"Escribe tu nombre completo",email:"Escribe un correo válido",phone:"Escribe un celular válido (ej. 0991234567)",documentId:"Revisa tu cédula o RUC",amount:"El monto de la reserva debe ser un valor entero desde USD 200"};
 
 function activeReservationError(active){return {error:`Ya tienes una reserva activa (código ${active.client_tx_id}). Si quieres cambiar de carro, escríbenos y te ayudamos.`,code:"active_reservation"};}
 
@@ -88,7 +91,8 @@ async function createReservationRoute(req,res,store,settings,now,messaging){
   if(!vehicle)return json(res,404,{error:"Vehículo no encontrado"});
   if(vehicle.status!=="available")return json(res,409,{error:"Este vehículo ya está reservado"});
   if(input.agencyId!==null&&!(await store.getAgency(input.agencyId)))return json(res,400,{error:FIELD_ERRORS.agencyId});
-  const row=await store.createReservation({...input,phoneNorm,clientTransactionId:newClientTransactionId(current),amountCents:RESERVATION_AMOUNT_CENTS,mode:settings.mode});
+  const maxUsd=reservationMaxUsd(vehicle.price);if(input.amountUsd>maxUsd)return json(res,400,{error:`Para este carro puedes reservar con hasta USD ${maxUsd.toLocaleString("es-EC")} (30% del precio, máximo USD 5.000 por pago). El resto lo pagas al comprar.`,fields:["amount"]});
+  const row=await store.createReservation({...input,phoneNorm,clientTransactionId:newClientTransactionId(current),amountCents:input.amountUsd*100,mode:settings.mode});
   await store.createLead({kind:"reservation",name:input.name,email:input.email,phone:input.phone,vehicleId:input.vehicleId,message:`Reserva ${row.client_tx_id} iniciada (verificación de celular pendiente)`});
   // Capa 2: código de verificación al celular antes de habilitar el pago.
   const sent=await sendCode(store,row,now,messaging);
@@ -443,4 +447,22 @@ async function analistaRoutes(req,res,store,url,key,now){
     const item=url.searchParams.get("mode")==="demo"?demoDashboard({targets,from,to,now:now()}):computeDashboard(await store.metricsRaw(from,to),{targets,from,to,now:now()});
     return json(res,200,{item:{...item,period}});}
   return json(res,404,{error:"Ruta no encontrada"});
+}
+
+// ---------------- Agenda de test drive ----------------
+async function createTestDriveRoute(req,res,store,now){
+  const check=validateTestDrive(await readBody(req));if(check.error)return json(res,400,{error:check.error});
+  const d=check.value,car=await store.getVehicle(d.vehicleId),agency=car&&await store.getAgency(d.agencyId);
+  if(!car)return json(res,404,{error:"Vehículo no encontrado"});if(!agency)return json(res,400,{error:"Elige una agencia"});
+  if(car.status!=="available")return json(res,409,{error:"Este carro ya está reservado por otra persona. Te mostramos carros similares en el catálogo."});
+  const transfer=needsTransfer(car,agency),current=now();
+  if(!isValidSlot(d.visitAt,{now:current,transfer}))return json(res,400,{error:transfer?"Elige un horario desde dentro de 2 días: necesitamos ese tiempo para llevar el carro a esa agencia.":"Ese horario ya no está disponible. Elige otro."});
+  const visitAt=new Date(d.visitAt);
+  if((await store.takenTestDriveSlots(car.id,current)).includes(visitAt.toISOString()))return json(res,409,{error:"Alguien acaba de tomar ese horario para este carro. Elige otro."});
+  if(await store.countTestDrivesByPhone(d.phone,current)>=3)return json(res,429,{error:"Ya tienes 3 test drives agendados. Escríbenos por WhatsApp si necesitas otro."});
+  const code=`TD-${randomBytes(3).toString("hex").toUpperCase()}`;
+  const row=await store.createTestDrive({...d,code,visitAt});
+  const extras=[d.tradeIn?"llevará su carro para avaluarlo (parte de pago)":"",d.finance?"quiere ayuda con el financiamiento":""].filter(Boolean).join("; ");
+  await store.createLead({kind:"test_drive",name:d.name,email:d.email||null,phone:d.phone,vehicleId:car.id,message:`Test drive ${code} agendado en ${agency.name} el ${formatVisit(visitAt)}${transfer?" (requiere traslado del carro)":""}${extras?`. El cliente ${extras}`:""}${d.notes?`. Nota: ${d.notes}`:""}`});
+  return json(res,201,{item:{code,visitAt:visitAt.toISOString(),transfer,vehicleId:car.id,agency:{id:agency.id,name:agency.name,address:agency.address,city:agency.city,lat:agency.lat,lng:agency.lng,phone:agency.phone},name:d.name,tradeIn:d.tradeIn,finance:d.finance,status:row.status}});
 }

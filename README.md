@@ -149,3 +149,10 @@ El chat del sitio usa un agente de IA (Claude, de Anthropic) cuando existe la va
 - **Panel del asesor → «Clientes y etapas»**: Nuevo → Contactado → Cita agendada → Cita asistida → Reservado → Vendido / Perdido (con motivo). Muestra el recorrido web y permite registrar clientes de WhatsApp con su código.
 - **Tablero del analista** en `/analista`, protegido con `ANALISTA_KEY` (variable de entorno en Vercel, distinta de `ASESOR_KEY`): indicadores del BSC con semáforo, recorrido de 8 etapas, canales, herramientas, asesores, motivos de pérdida y tasaciones. Tiene «Datos reales» y «Datos de ejemplo».
 - **Metas** en `medicion/metas.json` (editables sin programar), tomadas de «Indicadores del Balanced Scorecard».
+
+## Mejoras de la ficha del carro
+
+- **Reserva con monto libre**: mínimo USD 200; el cliente puede abonar más (opciones rápidas u otro monto) hasta el 30% del precio y máximo USD 5.000 por pago. Todo se descuenta del precio y es reembolsable.
+- **Agenda de test drive** (`/reservar/:id` o `/test-drive/:id`): agencia → fecha y hora (lun–vie 09:00–17:00, sáb 10:00–16:00, sin domingos; 2 horas de anticipación o 2 días si el carro se traslada de ciudad) → datos → confirmación con calendario (.ics), WhatsApp y mapa. Evita dos citas a la misma hora para el mismo carro y marca al cliente como «Cita agendada» en el panel del asesor.
+- **«Empezar ahora» → Tu camino de compra**: los pasos en línea del carro (test drive, cuota, parte de pago, reserva, documentos) con lo que el cliente ya hizo, el siguiente paso recomendado y cuánto le falta pagar.
+- **Vista 360°** (`viewer360.js`, three.js en `assets/vendor/three`): modelo 3D ilustrativo según el tipo y color del carro, con golpes y rayones simulados de la inspección de 150 puntos, marcados y explicados. Se abre desde la galería, el historial y el catálogo. En producción se reemplaza por fotos 360° reales del alistamiento.

@@ -17,6 +17,10 @@ import { isValidCedula } from "./prequalification.mjs";
 
 export const RESERVATION_AMOUNT_USD = 200;
 export const RESERVATION_AMOUNT_CENTS = RESERVATION_AMOUNT_USD * 100;
+// El cliente puede abonar más que el mínimo: hasta el 30% del precio del carro, con un tope de USD 5.000 por pago.
+export const RESERVATION_MAX_USD = 5000;
+export const RESERVATION_MAX_SHARE = 0.3;
+export function reservationMaxUsd(price) { return Math.max(RESERVATION_AMOUNT_USD, Math.min(RESERVATION_MAX_USD, Math.floor((Number(price) || 0) * RESERVATION_MAX_SHARE / 50) * 50)); }
 export const CURRENCY = "USD";
 export const PAYPHONE_CONFIRM_URL = "https://paymentbox.payphonetodoesposible.com/api/confirm";
 export const PAYPHONE_BOX_CSS = "https://cdn.payphonetodoesposible.com/box/v2.0/payphone-payment-box.css";
@@ -46,7 +50,8 @@ export function validateReservationInput(data = {}) {
     name: clean(data.name, 120),
     email: clean(data.email, 160).toLowerCase(),
     phone: clean(data.phone, 20).replace(/[\s-]/g, ""),
-    documentId: clean(data.documentId, 13)
+    documentId: clean(data.documentId, 13),
+    amountUsd: data.amount === undefined || data.amount === null || data.amount === "" ? RESERVATION_AMOUNT_USD : Number(data.amount)
   };
   const errors = [];
   if (!Number.isInteger(value.vehicleId) || value.vehicleId <= 0) errors.push("vehicleId");
@@ -55,6 +60,7 @@ export function validateReservationInput(data = {}) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.email)) errors.push("email");
   if (!/^(\+?593|0)9\d{8}$/.test(value.phone)) errors.push("phone");
   if (value.documentId && !/^\d{10}(\d{3})?$/.test(value.documentId)) errors.push("documentId");
+  if (!Number.isInteger(value.amountUsd) || value.amountUsd < RESERVATION_AMOUNT_USD) errors.push("amount");
   return { ok: errors.length === 0, errors, value };
 }
 
