@@ -1444,3 +1444,11 @@ a.sticky-reserve { padding:0 18px; text-decoration:none; }
 .visit-row select,.visit-row input { min-height:44px; flex:1 1 130px; min-width:0; padding:0 12px; border:1px solid #b8c3d3; border-radius:10px; background:#fff; color:#0b1d40; font-size:14px; box-sizing:border-box; }
 .visit-row .reservation-confirm { min-width:0; min-height:44px; flex:0 0 auto; }
 .pay-extra .sim-link { justify-self:start; padding:0; }
+
+/* Calculadora de cuotas */
+.loan-rows { display:grid; gap:6px; margin:8px 0 0; }
+.loan-rows div { display:flex; justify-content:space-between; gap:10px; font-size:11px; }
+.loan-rows dt { color:#697388; }
+.loan-rows dd { margin:0; color:#17325d; font-weight:800; }
+.loan-note { display:block; margin:8px 0 10px; color:#7b879c; font-size:10px; line-height:1.4; }
+.calculator .loan-rows div { font-size:13px; }
